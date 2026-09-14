@@ -17,3 +17,4 @@ buyer-stderr.log
 
 # CI workflow kept locally; added via GitHub web UI (PAT lacks workflow scope)
 .github
+video-evidence
