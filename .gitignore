@@ -13,3 +13,4 @@ test-ledger
 .surfpool
 receipt-tampered.json
 tampered-result.json
+buyer-stderr.log
