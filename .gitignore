@@ -14,3 +14,6 @@ test-ledger
 receipt-tampered.json
 tampered-result.json
 buyer-stderr.log
+
+# CI workflow kept locally; added via GitHub web UI (PAT lacks workflow scope)
+.github
