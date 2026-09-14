@@ -1,0 +1,12 @@
+{
+  "name": "agenttoll-verifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0"
+  }
+}

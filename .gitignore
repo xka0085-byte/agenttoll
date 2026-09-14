@@ -3,6 +3,8 @@
 target
 **/*.rs.bk
 node_modules
+verifier/last-receipt.json
+receipt-pass.json
 test-ledger
 .yarn
 .surfpool
