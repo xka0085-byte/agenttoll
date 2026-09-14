@@ -1,0 +1,17 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with: { toolchain: "1.89.0" }
+      - name: Install Solana CLI
+        run: sh -c "$(curl -sSfL https://release.anza.xyz/v4.2.2/install)"
+      - name: Install Anchor
+        run: |
+          curl -sL -o anchor "https://github.com/otter-sec/anchor/releases/download/v1.2.0/anchor-1.2.0-x86_64-unknown-linux-gnu"
+          chmod +x anchor && sudo mv anchor /usr/local/bin/
+      - run: anchor build --arch v0
+      - run: cargo test --all
