@@ -8,3 +8,5 @@ receipt-pass.json
 test-ledger
 .yarn
 .surfpool
+receipt-tampered.json
+tampered-result.json
