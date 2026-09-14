@@ -1,10 +1,35 @@
 # AgentToll
 
-AgentToll 是 Solana 上的 AI 代理交付回执协议。Vendor 将报告原始字节的 SHA-256 digest 写入公开 PDA；买方可以独立读取链上数据并在本地重新计算 digest，不需要信任 vendor 的服务。
+AgentToll is a delivery-receipt protocol for AI-agent commerce on Solana. A vendor pins the SHA-256 digest of a report's exact bytes into a public PDA account on-chain. Anyone — the buyer, an auditor, a regulator — can independently recompute the digest from the delivered file and compare it against the chain, **without trusting the vendor, the buyer, or any API we operate**.
 
-W3 demo 使用 **test-USDC (self-issued devnet mint)**，它只是 devnet 演示代币，不是真实 USDC，也没有现实货币价值。
+> **"Don't trust what we say. Run the command."**
+> Every capability claim in this README maps to a command in this repo and, where possible, a Solscan link on devnet.
 
-## 架构
+**Status**: W1–W3 complete, independently audited (reports in [`audit/`](audit/)). Deployed on Solana devnet.
+
+- Program ID: `8ACN1KNEFXM2N2FMzxTfAzB1c3g5n47ZuhbPoUXPnCTp` — [view on Solscan](https://solscan.io/account/8ACN1KNEFXM2N2FMzxTfAzB1c3g5n47ZuhbPoUXPnCTp?cluster=devnet)
+- Receipt created by the recorded demo payment flow: [delivery tx](https://solscan.io/tx/25pCWs53mE6cMRyFfjxEYc5hVf3XhPWGKegLyLiZFhsqtRVJUDtWGBwMgFmWDurSfoSrBpKNwsraanePBpakNU4u?cluster=devnet) · [payment tx](https://solscan.io/tx/5KAvtPuLVCHBJwd17rM2RGTS6KzGj7gyjQQXMZFTY4Fs5iTnnkSAKepps9cRFLSqdM2WXAWhJSMP7m6SdQiuxWSN?cluster=devnet)
+
+**Honesty note**: the demo uses **test-USDC, a self-issued devnet mint** with no real-world value. It is not real USDC. We say so everywhere, including in code output.
+
+## Why this exists
+
+Machine-to-machine payments (the x402 pattern) are becoming real: agents pay per API call. But after an agent pays, it holds **no trustworthy proof** of *what* it received. Receipts, invoices, or hashes served by the vendor itself are indistinguishable from fabricated ones. AgentToll moves that proof to a neutral public ledger: the digest is written once, is tamper-evident (same id + different digest is rejected on-chain), and is verifiable offline forever.
+
+## Verify an existing receipt right now (no vendor involved)
+
+```bash
+cd verifier && npm install && cd ..
+node verifier/verify.mjs \
+  --url https://api.devnet.solana.com \
+  --vendor B7wGaKwEGAmNP7PEhqwFrvfCQPH4zwiE7FZNLoeB4naD \
+  --report-id x402-demo-001 \
+  --file demo/report-402.json
+```
+
+Expected: JSON with `"verdict": "PASS"` and all five checks `true` (C1 ownership, C2 PDA derivation, C3 schema, C4 content binding, C5 freshness). Exit code 0. Then tamper with the file (add one byte) and rerun — C4 fails, exit code 1. **That mismatch is the product.**
+
+## Architecture
 
 ```mermaid
 sequenceDiagram
@@ -24,123 +49,70 @@ sequenceDiagram
     C-->>B: C1-C5 PASS/FAIL JSON
 ```
 
-## 环境要求
+The on-chain program enforces the anti-tamper rule at the ledger level: a PDA seeded by `(vendor, report_id)` can be created once; re-creating with the same digest is idempotent, with a different digest fails with `DigestConflict`. Overwrites are impossible, not just discouraged.
 
-- Node.js 22+
-- 可访问的 Solana devnet RPC
-- 已部署的 AgentToll 程序：`8ACN1KNEFXM2N2FMzxTfAzB1c3g5n47ZuhbPoUXPnCTp`
-- 有 devnet SOL 的 vendor keypair
+## Run the full x402 demo
 
-安装唯一的 JavaScript 依赖集：
+Requires Node.js 22+, a devnet-funded vendor keypair, and the deployed program above.
 
 ```bash
-cd verifier
-npm install
-cd ..
-```
+# 0. install the single JS dependency set
+cd verifier && npm install && cd ..
 
-运行时依赖仅为 `@solana/web3.js` 和 `@solana/spl-token@0.4.9`；HTTP 服务使用 Node 内置 `http`。
-
-## 配置环境变量
-
-Bash：
-
-```bash
+# 1. configure (bash example)
 export AGENTTOLL_RPC_URL='https://api.devnet.solana.com'
 export AGENTTOLL_KEYPAIR='/absolute/path/to/vendor-keypair.json'
-# 可选；未设置时 setup 生成 demo/buyer-keypair.json
-export AGENTTOLL_BUYER_KEYPAIR='/absolute/path/to/buyer-keypair.json'
-```
 
-PowerShell：
-
-```powershell
-$env:AGENTTOLL_RPC_URL = 'https://api.devnet.solana.com'
-$env:AGENTTOLL_KEYPAIR = 'C:\path\to\vendor-keypair.json'
-# 可选
-$env:AGENTTOLL_BUYER_KEYPAIR = 'C:\path\to\buyer-keypair.json'
-```
-
-所有 keypair 都只通过文件路径读取。`demo/buyer-keypair.json` 和 `demo/config.json` 已被 `.gitignore` 排除。
-
-## 1. 幂等准备 devnet 资产
-
-```bash
+# 2. create test-USDC mint, fund buyer (idempotent)
 node demo/setup.mjs
-node demo/setup.mjs
-```
 
-第一次执行创建 6 decimals 的 test-USDC (self-issued devnet mint)、vendor/buyer ATA，确保买家持有 100 test-USDC，并确保买家有 0.05 devnet SOL。第二次执行复用现有配置和账户。
-
-## 2. 启动 vendor
-
-```bash
+# 3. start vendor (localhost:8787)
 node demo/vendor.mjs
-```
 
-服务只监听 `127.0.0.1:8787`。可通过 `PORT` 覆盖端口。另开一个终端确认未付款请求得到 HTTP 402：
+# 4. unpaid request must be refused
+curl -i http://127.0.0.1:8787/report/x402-demo-001        # → HTTP 402
 
-```bash
-curl -i http://127.0.0.1:8787/report/x402-demo-001
-```
-
-响应包含 `X-Payment-Required`，金额 `10000` base units，即 0.01 test-USDC。
-
-## 3. 运行买方代理
-
-```bash
+# 5. run the buyer agent: pay → receive report+receipt → verify 5/5
 node demo/buyer-agent.mjs
+
+# 6. forged payment signatures must be rejected
+curl -i -X POST -H 'X-Payment-Signature: not-a-real-signature' \
+  http://127.0.0.1:8787/report/x402-demo-001              # → HTTP 402, no report
 ```
 
-买方代理自动执行：获取 402 挑战、发送 `transferChecked`、携付款签名重新请求、保存报告、spawn W2 verifier。成功时 stdout JSON 包含：
+`demo/buyer-agent.mjs` prints `{payment_sig, receipt_tx, pda, verifier_verdict, checks}` and exits 0 only if the spawned offline verifier passes all five checks.
 
-- `payment_sig`
-- `receipt_tx`
-- `pda`
-- `verifier_verdict: "PASS"`
-- C1-C5 `checks`
+## On-chain program (W1)
 
-## 4. 验证拒绝假付款
+Anchor 1.2.0, two instructions:
 
-Bash：
+- `create_receipt(report_id, digest)` — first call creates the PDA; same id + same digest is idempotent; same id + different digest → `DigestConflict`
+- `verify_receipt(report_id, digest)` — permissionless; emits a `ReceiptVerified` event
+
+Build and test locally:
 
 ```bash
-curl -i -X POST \
-  -H 'X-Payment-Signature: not-a-real-signature' \
-  http://127.0.0.1:8787/report/x402-demo-001
+./build.sh        # = anchor build --arch v0
+cargo test --all  # 8 litesvm tests, incl. DigestConflict & idempotency
 ```
 
-PowerShell：
+## Audits
 
-```powershell
-curl.exe -i -X POST -H "X-Payment-Signature: not-a-real-signature" http://127.0.0.1:8787/report/x402-demo-001
-```
+Every milestone was reviewed by an independent auditor that did not write the business code. Reports with command outputs and on-chain evidence:
 
-预期结果是 HTTP 402 和明确原因；响应不得包含报告。
+- [`audit/W1-2026-09-14.md`](audit/W1-2026-09-14.md) — contract, 8/8 tests, devnet deployment
+- [`audit/W2-2026-09-14.md`](audit/W2-2026-09-14.md) — offline verifier, tamper-detection e2e
+- [`audit/W3-2026-09-14.md`](audit/W3-2026-09-14.md) — x402 flow, negative paths, idempotent replay
 
-## 5. 独立验证报告
+## Scope & limitations (read before trusting anything)
 
-W2 verifier 可脱离 vendor HTTP 服务运行：
+- **test-USDC is self-issued** on devnet; it stands in for a real stablecoin. No real value.
+- The demo serves **one report id** on localhost; it is a protocol demo, not a hosted service.
+- The on-chain receipt binds `report_id + digest`; the **payment signature is linked via the demo flow, not stored on-chain** (the frozen W1 schema has no such field). See W3 audit §findings.
+- A professional third-party security audit is on the roadmap and has **not** happened yet.
 
-```bash
-node verifier/verify.mjs \
-  --url "$AGENTTOLL_RPC_URL" \
-  --vendor <VENDOR_PUBKEY> \
-  --report-id x402-demo-001 \
-  --file demo/buyer-report.json
-```
+## Disclosed prior work
 
-它执行 ownership、PDA 派生、schema、内容绑定、时间/vendor 五项检查。详情见 [verifier/README.md](verifier/README.md)。
+This project was built for the Colosseum CWF hackathon. Per the rules, we disclose pre-existing development: [t3n-recon-agent](https://github.com/xka0085-byte/t3n-recon-agent) and [z-tenant-recon](https://github.com/xka0085-byte/z-tenant-recon) — a TEE-based prototype implementing the same anti-tamper digest logic (same-id-different-digest rejection, independent verifier), from which the on-chain design was ported. All AgentToll commits, tests, and deployments happened during the competition window (first commit: 2026-09-14).
 
-## 安全与验收检查
-
-```bash
-node --check demo/setup.mjs
-node --check demo/vendor.mjs
-node --check demo/buyer-agent.mjs
-node --check verifier/verify.mjs
-git diff -- programs/agenttoll/src
-git status --short
-```
-
-`git diff -- programs/agenttoll/src` 在 W3 阶段应为空。交易签名必须来自实际 devnet 运行；本文档不提供或伪造验收签名。
+中文说明见 [README.zh-CN.md](README.zh-CN.md)。
