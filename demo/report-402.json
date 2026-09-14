@@ -1,0 +1,6 @@
+{
+  "report_id": "x402-demo-001",
+  "title": "AgentToll x402 demonstration report",
+  "status": "demo",
+  "note": "test-USDC (self-issued devnet mint) payment-gated example content"
+}

@@ -5,6 +5,9 @@ target
 node_modules
 verifier/last-receipt.json
 receipt-pass.json
+demo/buyer-keypair.json
+demo/config.json
+demo/buyer-report.json
 test-ledger
 .yarn
 .surfpool
