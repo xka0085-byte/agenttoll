@@ -1,5 +1,7 @@
 # AgentToll
 
+[![CI](https://github.com/xka0085-byte/agenttoll/actions/workflows/ci.yml/badge.svg)](https://github.com/xka0085-byte/agenttoll/actions/workflows/ci.yml)
+
 AgentToll is a delivery-receipt protocol for AI-agent commerce on Solana. A vendor pins the SHA-256 digest of a report's exact bytes into a public PDA account on-chain. Anyone — the buyer, an auditor, a regulator — can independently recompute the digest from the delivered file and compare it against the chain, **without trusting the vendor, the buyer, or any API we operate**.
 
 > **"Don't trust what we say. Run the command."**
