@@ -1,0 +1,14 @@
+{
+  "name": "receiptrail-mcp",
+  "version": "0.2.0",
+  "description": "ReceiptRail MCP (stdio bridge): issue and verify on-chain x402 delivery receipts on Solana. Hash-locked, verifiable proof of delivery for AI agent payments.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "receiptrail-mcp": "mcp-server.mjs" },
+  "main": "mcp-server.mjs",
+  "files": ["mcp-server.mjs", "README.md"],
+  "keywords": ["x402", "mcp", "receipt", "escrow", "solana", "usdc", "proof-of-delivery", "agent-payments", "receiptrail"],
+  "engines": { "node": ">=18" },
+  "repository": { "type": "git", "url": "git+https://github.com/xka0085-byte/agenttoll.git" },
+  "homepage": "https://agenttoll-receipts.app.workbuddy.host/"
+}
