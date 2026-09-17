@@ -18,3 +18,9 @@ buyer-stderr.log
 # CI workflow kept locally; added via GitHub web UI (PAT lacks workflow scope)
 .github
 video-evidence
+receipts-service-deploy/service-keypair.json
+receipts-service/service-keypair.json
+receipts-service-deploy/receipts-store.json
+receipts-service/receipts-store.json
+receipts-service-deploy/config.json
+receipts-service/config.json
