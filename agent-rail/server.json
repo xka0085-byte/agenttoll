@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.xka0085-byte/agenttoll-receipts",
+  "title": "AgentToll Receipts",
+  "description": "Issue and verify on-chain x402 delivery receipts on Solana. Hash-locked, escrow-grade, independently verifiable proof of delivery.",
+  "websiteUrl": "https://receipts.agenttoll.io",
+  "version": "0.1.0",
+  "remotes": {
+    "production": {
+      "transportType": "streamable-http",
+      "url": "https://receipts.agenttoll.io/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AGENTTOLL_API_KEY}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "issue_receipt",
+      "title": "Issue delivery receipt",
+      "description": "Anchor a SHA-256 digest of delivered content plus the x402 settlement reference on Solana. Returns a permanent, publicly verifiable receipt URI. Use after a successful x402 settlement to give the buyer proof of delivery. Costs 0.001 USDC via x402 (founding sellers free)."
+    },
+    {
+      "name": "verify_receipt",
+      "title": "Verify delivery receipt",
+      "description": "Verify any AgentToll receipt against Solana state and return C1-C5 check results: contract match, deliverable match, tamper detection, timing, amount. Use before accepting a paid delivery as final. Read-only, no cost."
+    },
+    {
+      "name": "get_receipt",
+      "title": "Get receipt details",
+      "description": "Fetch full receipt details by receipt id: digests, checks, outcome (settled/refunded/expired), amount, buyer, seller, timestamp. Read-only, no cost."
+    }
+  ]
+}

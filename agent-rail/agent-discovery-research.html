@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 工作原理与工具发现机制 — 深度研究报告</title>
+<style>
+:root{--ink:#1c1c1a;--mut:#5f5e5a;--line:#d9d7cf;--bg:#faf9f5;--card:#fff;--acc:#0F6E56;--accbg:#E1F5EE;--warn:#993C1D;--warnbg:#FAECE7;--blue:#185FA5;--bluebg:#E6F1FB;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.75;}
+.wrap{max-width:860px;margin:0 auto;padding:48px 24px;}
+.tag{display:inline-block;background:var(--accbg);color:var(--acc);font-size:13px;padding:4px 12px;border-radius:99px;margin-bottom:16px;}
+h1{font-size:30px;font-weight:500;letter-spacing:-0.5px;margin-bottom:10px;}
+.sub{font-size:16px;color:var(--mut);margin-bottom:36px;}
+h2{font-size:21px;font-weight:500;margin:44px 0 14px;padding-top:20px;border-top:1px solid var(--line);}
+h3{font-size:16px;font-weight:500;margin:24px 0 10px;}
+p{margin-bottom:12px;font-size:15px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0;font-size:14px;}
+.card b{display:block;margin-bottom:6px;}
+.hl{background:var(--bluebg);border-left:3px solid var(--blue);}
+.warn{background:var(--warnbg);border-left:3px solid var(--warn);}
+.good{background:var(--accbg);border-left:3px solid var(--acc);}
+ol,ul{margin:0 0 12px 22px;font-size:15px;}
+li{margin-bottom:6px;}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13.5px;margin:12px 0;}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;}
+th{background:#f3f1ea;font-weight:500;}
+tr:last-child td{border-bottom:none;}
+code{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:#f0eee7;padding:1px 6px;border-radius:5px;}
+.src{font-size:12.5px;color:var(--mut);margin-top:4px;}
+.arrow{color:var(--acc);font-weight:500;}
+.meta{font-size:12.5px;color:var(--mut);}
+</style>
+</head>
+<body>
+<div class="wrap">
+<span class="tag">深度研究 · 2026-09-17 · 检索自 MCP 官方规范 / Kong / Chainalysis / bluerails 实测 / Google 开发者文档等时效性来源</span>
+<h1>Agent 怎么工作、怎么发现工具</h1>
+<p class="sub">从底层逻辑推导 AgentToll 的「被发现」方案 —— 一切以实测数据为准，不以行业 hype 为准</p>
+
+<h2>一、Agent 的底层工作循环（ReAct）</h2>
+<p>所有工具型 agent（Claude Code、Cursor、我们自己在用的这套）本质上是同一个循环：</p>
+<div class="card">
+<b>推理 → 选工具 → 调用 → 读结果 → 再推理……直到任务完成</b>
+模型不「上网浏览」，它只能看到两类东西：<b>①上下文里已有的信息</b>（系统提示、对话、工具清单）和 <b>②工具调用返回的结果</b>。工具调用是结构化的 function calling：模型输出 JSON 参数，运行时执行，结果回填上下文，循环继续。
+</div>
+<p><b>推论 1：工具的「定义文本」就是 agent 的全部视野。</b>Neo4j 的工程结论：模糊的名称、单薄的描述、重叠的功能会直接导致模型选错工具。换句话说——<span class="arrow">我们对工具描述文本的措辞，就是我们的 SEO。</span></p>
+
+<h2>二、工具从哪来：三层发现机制</h2>
+<table>
+<tr><th>层</th><th>机制</th><th>agent 怎么命中你</th><th>我们要做什么</th></tr>
+<tr><td><b>① 预配置层</b></td><td>用户手动把 MCP server 写进配置（如 <code>mcp.json</code>），启动时 <code>tools/list</code> 拉取全部工具定义</td><td>被用户「点名安装」——npm 包名、文档教程、目录页是入口</td><td>npm 发 <code>@agenttoll/receipts-mcp</code>，README 写清场景词</td></tr>
+<tr><td><b>② 注册表层</b></td><td><b>官方 MCP Registry</b>（Anthropic 2025-12 捐给 AAIF 基金会，REST API：<code>GET /v0.1/servers?search=x402 receipt</code>）。Kong 等已实现企业级注册表。另外部分 agent 有内置的延迟工具检索（按需模糊搜索工具库）</td><td>agent 运行时按任务关键词查询注册表，机械匹配 <b>name + description + 元数据</b></td><td>注册表提交 + 工具描述文本按检索词优化（这一条之前被我们低估）</td></tr>
+<tr><td><b>③ 网络检索层</b></td><td>agent 任务缺口时自己上网搜/抓：搜索引擎、x402scan 等目录、以及抓取 <code>/.well-known/agent-card.json</code>、SKILL.md、Schema.org 结构化数据</td><td>网页内容 + 结构化标记 + 目录条目</td><td>见第四节优先级</td></tr>
+</table>
+<p class="meta">来源：MCP 官方规范 2026-07-28 版（statelessness + server/discover 为新版变化）；Kong Konnect MCP Registry 技术预览；Neo4j agent-tools 工程指南。</p>
+
+<h2>三、实测案例（不是 hype，是上线了的东西）</h2>
+<div class="card good">
+<b>案例 1：DirectBooker（酒店业）—— MCP 被大企业当官网级别的入口</b>
+一个把酒店直连房价喂给 ChatGPT/Claude 的 MCP server，全球十大酒店集团中的五家（含 BWH、丽笙）签约接入，覆盖 2.5 亿+ 会员——它们用它绕开 OTA。证明：<b>MCP 端点已经是企业愿意签合同的正式销售渠道</b>。
+</div>
+<div class="card good">
+<b>案例 2：PayanAgent —— SKILL.md 让 agent 零集成可用</b>
+<code>curl payanagent.com/SKILL.md</code> 输出喂给任何 LLM agent，立即具备发现/购买/开回执能力。它不做人类营销，靠 SKILL.md + npm MCP + 目录收录吃 agent 流量。
+</div>
+<div class="card good">
+<b>案例 3：Google UCP —— well-known 模式 6 个月进入生产</b>
+Google 2026-01-11 发布 UCP（与 Shopify/Walmart/Target 共同开发），用 <code>/.well-known/ucp</code> 模式 + 强类型 schema，已支撑 Google AI Mode 的结账。证明 <code>/.well-known/</code> 机器发现模式已是生产级基础设施。
+</div>
+<div class="card">
+<b>案例 4（反面）：llms.txt 被高估了</b>
+bluerails 基于 30 万域名（SE Ranking）+ 服务器日志的实测：<b>主流 LLM 爬虫几乎不抓 llms.txt</b>（采用率 ~10%，无可测量的引用提升）。但 <b>IDE 型 agent（Cursor/Cline）和 MCP 集成确实会消费它</b>。结论：值得发（30 分钟成本），但别指望它带来流量。
+</div>
+<div class="card">
+<b>案例 5（我们自己）：本会话就是活的证据</b>
+我这个 agent 的工具分两层：系统提示里预配置的工具 + <b>运行时按需检索的延迟工具库</b>（模糊匹配工具名和描述才加载）。我找 x402 服务时走的是 WebSearch + x402scan 抓取——正是第③层通道。我们自己的行为就验证了这套发现模型。
+</div>
+
+<h2>四、修正后的优先级（重要：和之前方案有两处不同）</h2>
+<div class="card warn">
+<b>修正 1：llms.txt 降级</b> —— 之前排在发现通道前列，实测数据显示主流爬虫不抓它。保留（成本≈0），但不指望它。
+</div>
+<div class="card warn">
+<b>修正 2：Schema.org JSON-LD 是被我们漏掉的最高杠杆项</b> —— bluerails 结论：结构化数据是 2026 年 agent 自然发现中<b>杠杆率最高的单一信号</b>，agent 读 schema 标记远比读页面布局可靠。我们要给报价页和服务文档加 <code>Product/Service + Offer</code> 的 JSON-LD。
+</div>
+<table>
+<tr><th>优先级</th><th>动作</th><th>命中哪层</th><th>成本</th></tr>
+<tr><td>P0</td><td>MCP server 上 npm + <b>官方 MCP Registry 提交</b>（关键词：x402 receipt / escrow / proof of delivery）</td><td>①+②</td><td>1-2 天</td></tr>
+<tr><td>P0</td><td>报价页 + 文档加 <b>Schema.org JSON-LD</b>（Service/Offer/price）</td><td>③</td><td>半天</td></tr>
+<tr><td>P1</td><td>agent-card.json 放 <code>/.well-known/</code>（对齐 A2A + UCP 模式）</td><td>③</td><td>10 分钟</td></tr>
+<tr><td>P1</td><td>SKILL.md 挂域名根目录（对齐 PayanAgent/Claude Code skills 惯例）</td><td>③</td><td>已完成</td></tr>
+<tr><td>P1</td><td>x402scan / AgentCash / usdc.org 目录提交（那里有现成的 agent+人类流量）</td><td>③</td><td>半天</td></tr>
+<tr><td>P2</td><td>llms.txt 挂上（顺手）</td><td>③</td><td>已完成</td></tr>
+<tr><td>P2</td><td>考虑 ERC-8004 agent 身份注册（2026-01-29 主网上线，agentutility 等已挂 agentId）——信任层加分项</td><td>③</td><td>待评估</td></tr>
+</table>
+
+<h2>五、设计推论：文案即架构</h2>
+<p>三层发现机制的共同汇点是<b>文本</b>：MCP 工具描述、注册表元数据、schema 标记、SKILL.md。所以有一个统一的写作规范：</p>
+<ol>
+<li><b>名称含检索词</b>：工具名里要有 <code>x402 / receipt / escrow / verification / solana</code></li>
+<li><b>描述回答三个问题</b>：干什么（issue/verify delivery receipts）、什么时候用（after x402 settlement / before accepting delivery）、输入输出是什么</li>
+<li><b>数字前置</b>：AEO 内容规范——每段第一句是可直接抽取的答案（agent 合成回复时优先抽取）</li>
+<li><b>时新性</b>：agent 的信任信号第一位是「最近更新过」——spec 版本号、页面日期要持续滚动</li>
+</ol>
+
+<h2>六、市场背景数字（为什么现在铺）</h2>
+<ul>
+<li>Adobe Analytics：零售站点的生成式 AI 流量同比 <b>+4,700%</b>（2024/07→2025/07）</li>
+<li>ChatGPT 周活 ~7 亿；73% 消费者已在购物旅程用 AI；Morgan Stanley：2030 年近半网购者用 AI agent，占消费 ~25%</li>
+<li> enterprises 79% 已采用 agent，但仅 11% 进生产——<b>窗口期：铺得早 = 进生产环境的供应商</b></li>
+<li>反面警告：Gartner 预计 2027 年前 40%+ agentic AI 项目被砍——所以一切以「真实使用」验收（我们的北极星 KPI）</li>
+</ul>
+
+<h2>七、来源清单</h2>
+<ul class="meta">
+<li>MCP 官方规范 2026-07-28（modelcontextprotocol.io）—— server/discover、tools/list、注册表协议</li>
+<li>MCP Registry 规范（github.com/modelcontextprotocol/registry，Anthropic→AAIF 2025-12）</li>
+<li>Kong Konnect MCP Registry 技术预览（动态工具发现实现）</li>
+<li>bluerails.com《How AI agents actually find and trust your site》（2026 实测：SE Ranking 30 万域名 + 服务器日志 + DirectBooker 案例）</li>
+<li>Google UCP 发布（2026-01-11，/.well-known/ucp，Shopify/Walmart 合作）</li>
+<li>commercetools《7 AI trends 2026》、aigrowthagent.co（协议栈六标准：MCP/A2A/UCP/AP2/A2UI/AG-UI；Shopify llms.txt→agents.md）</li>
+<li>Neo4j《Agent tools》（ReAct 循环、工具描述即接口、tools vs skills）</li>
+<li>Chainalysis x402 采用报告（钱包留存、测试者→付款者 4 倍转化提升）</li>
+</ul>
+</div>
+</body>
+</html>

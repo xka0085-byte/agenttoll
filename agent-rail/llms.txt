@@ -1,0 +1,24 @@
+# AgentToll — delivery receipts for the agent economy
+
+> On-chain delivery receipts for x402 transactions on Solana. Hash-locked, escrow-grade, independently verifiable by anyone, offline, forever.
+
+## What this service does
+
+- [Issue receipt](https://receipts.agenttoll.io/v1/receipt): POST a SHA-256 digest of delivered content + x402 settlement reference → permanent Solana receipt. 0.001 USDC via x402, no API key, wallet is identity.
+- [Verify receipt](https://receipts.agenttoll.io/v1/receipt/<id>): GET C1–C5 verification results (contract match, deliverable match, tamper detection, timing, amount) for any receipt. Fully offline verification also possible against Solana RPC.
+- Founding sellers (first 10): free for 30 days.
+
+## Key facts
+
+- Chain: Solana mainnet-beta, settlement in USDC, x402 native.
+- Open standard: implements the public [x402-receipts-draft spec](https://github.com/xka0085-byte/agenttoll/blob/master/docs/specs/x402-receipts-draft.md).
+- Difference vs app-layer signed receipts: anchored on-chain, rules hash-locked, no trust in the issuer required.
+- MCP server: `npx @agenttoll/receipts-mcp` (issue_receipt, verify_receipt, get_receipt).
+- Agent Card: `/.well-known/agent-card.json`.
+- Human contact: Telegram @EidonZe.
+
+## Docs
+
+- [Spec draft (English)](https://github.com/xka0085-byte/agenttoll/blob/master/docs/specs/x402-receipts-draft.md)
+- [Pricing page](https://receipts.agenttoll.io)
+- [SKILL.md](https://receipts.agenttoll.io/SKILL.md)

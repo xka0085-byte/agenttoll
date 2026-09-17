@@ -1,0 +1,49 @@
+{
+  "name": "AgentToll Receipts",
+  "description": "On-chain delivery receipts for x402 transactions on Solana. Hash-locked, escrow-grade, independently verifiable. Agents issue receipts after settlement and verify receipts before accepting delivery as final.",
+  "url": "https://receipts.agenttoll.io",
+  "provider": {
+    "organization": "AgentToll",
+    "url": "https://github.com/xka0085-byte/agenttoll"
+  },
+  "version": "0.1.0",
+  "protocolVersion": "0.2.9",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "authentication": {
+    "schemes": ["x402"]
+  },
+  "defaultInputModes": ["application/json"],
+  "defaultOutputModes": ["application/json"],
+  "skills": [
+    {
+      "id": "issue_receipt",
+      "name": "Issue delivery receipt",
+      "description": "Anchor a SHA-256 digest of delivered content plus the x402 settlement reference on Solana. Returns a permanent, publicly verifiable receipt. For seller agents closing out an x402 sale.",
+      "tags": ["x402", "receipt", "escrow", "solana", "proof-of-delivery", "trust"],
+      "examples": [
+        "I just settled 0.01 USDC to a buyer via x402 — issue a delivery receipt for the payload digest.",
+        "Give my buyer a verifiable proof of delivery for this transaction."
+      ]
+    },
+    {
+      "id": "verify_receipt",
+      "name": "Verify delivery receipt",
+      "description": "Verify any AgentToll receipt against Solana state: C1-C5 checks (contract match, deliverable match, tamper detection, timing, amount). For buyer agents before marking a paid task complete.",
+      "tags": ["x402", "verification", "solana", "anti-fraud", "receipt"],
+      "examples": [
+        "Verify this receipt before I accept the delivered dataset as final.",
+        "Is this seller's receipt tamper-free and settled?"
+      ]
+    }
+  ],
+  "x402": {
+    "settlementChain": "solana",
+    "settlementAsset": "USDC",
+    "pricePerReceipt": "0.001",
+    "foundingSellers": "first 10 free for 30 days"
+  },
+  "openSpec": "https://github.com/xka0085-byte/agenttoll/blob/master/docs/specs/x402-receipts-draft.md"
+}
