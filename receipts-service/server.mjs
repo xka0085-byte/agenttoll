@@ -210,6 +210,217 @@ async function confirmAnchorInBackground(store, receipt, anchored) {
   }
 }
 
+// ---------- MCP endpoint (stateless streamable-http) ----------
+const MCP_PROTOCOL_VERSION = '2025-06-18';
+const MCP_TOOLS = [
+  {
+    name: 'issue_receipt',
+    title: 'Issue delivery receipt',
+    description: 'Anchor a SHA-256 digest of delivered content plus the x402 settlement reference on Solana. Returns a permanent, publicly verifiable receipt (poll until outcome === "settled"). Costs 0.001 USDC via x402; if x402_payment_signature is omitted, returns the payment challenge instead (pay 0.001 USDC to the service address, then call again with the payment tx signature).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        x402_payment_ref: { type: 'string', description: 'Unique reference for this transaction (1-128 chars)' },
+        deliverable_digest: { type: 'string', description: 'SHA-256 hex digest (64 chars) of the delivered content' },
+        x402_payment_signature: { type: 'string', description: 'Solana tx signature of the 0.001 USDC payment to the service address. Omit to receive the payment challenge.' },
+        buyer: { type: 'string', description: 'Optional buyer identifier (wallet address)' },
+        seller: { type: 'string', description: 'Optional seller identifier' },
+      },
+      required: ['x402_payment_ref', 'deliverable_digest'],
+    },
+  },
+  {
+    name: 'verify_receipt',
+    title: 'Verify delivery receipt',
+    description: 'Verify an AgentToll receipt against live Solana state: PDA owner must be the AgentToll program and the stored digest must match the receipt. Look up by receipt_id, or by x402_payment_ref (always works — the receipt lives on-chain). Read-only, no cost.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        receipt_id: { type: 'string', description: 'Receipt id, e.g. r_abcdef1234567890' },
+        payment_ref: { type: 'string', description: 'x402_payment_ref of the transaction (use this if receipt_id unknown; resolved on-chain)' },
+      },
+    },
+  },
+  {
+    name: 'get_receipt',
+    title: 'Get receipt details',
+    description: 'Fetch full receipt details: digests, checks, outcome, amount, buyer, seller, timestamp, PDA. Look up by receipt_id, or by x402_payment_ref (always works — the receipt lives on-chain). Read-only, no cost.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        receipt_id: { type: 'string', description: 'Receipt id, e.g. r_abcdef1234567890' },
+        payment_ref: { type: 'string', description: 'x402_payment_ref of the transaction (use this if receipt_id unknown; resolved on-chain)' },
+      },
+    },
+  },
+];
+
+function mcpResult(id, result) {
+  return { jsonrpc: '2.0', id, result };
+}
+function mcpError(id, code, message) {
+  return { jsonrpc: '2.0', id, error: { code, message } };
+}
+function toolText(payload) {
+  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
+}
+
+async function verifyReceiptOnChain(receipt) {
+  if (!receipt?.pda) return { verified: false, reason: 'no PDA on receipt' };
+  const acc = await rpcCall('getAccountInfo', [receipt.pda, { encoding: 'base64', commitment: 'confirmed' }]);
+  if (!acc?.value) return { verified: false, reason: 'PDA account not found on-chain' };
+  const ownerOk = acc.value.owner === PROGRAM_ID.toBase58();
+  const dataHex = Buffer.from(acc.value.data[0], 'base64').toString('hex');
+  const digestOk = dataHex.includes(receipt.deliverable_digest);
+  const refOk = dataHex.includes(Buffer.from(receipt.x402_payment_ref, 'utf8').toString('hex'));
+  return { verified: ownerOk && digestOk && refOk, pda_owner: acc.value.owner, owner_matches_program: ownerOk, digest_on_chain: digestOk, payment_ref_on_chain: refOk, lamports: acc.value.lamports };
+}
+
+// Reconstruct a receipt view from on-chain state via PDA (survives service restarts/redeploys,
+// since the store file is ephemeral but the chain is not). Returns null if PDA doesn't exist.
+async function receiptFromChain(service, paymentRef) {
+  const paymentRefBytes = Buffer.from(paymentRef, 'utf8');
+  if (paymentRefBytes.length === 0 || paymentRefBytes.length > 128) return null;
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from('receipt'), service.publicKey.toBuffer(), paymentRefBytes],
+    PROGRAM_ID,
+  );
+  const acc = await rpcCall('getAccountInfo', [pda.toBase58(), { encoding: 'base64', commitment: 'confirmed' }]).catch(() => null);
+  if (!acc?.value) return null;
+  const data = Buffer.from(acc.value.data[0], 'base64');
+  // PDA layout: 8B account discriminator … 4B len + payment_ref … 32B digest
+  let parsed = { payment_ref: paymentRef, digest: null };
+  for (let off = 0; off + 4 <= data.length; off++) {
+    const len = data.readUInt32LE(off);
+    if (len > 0 && len < 129 && off + 4 + len + 32 <= data.length) {
+      const candidate = data.subarray(off + 4, off + 4 + len).toString('utf8');
+      if (/^[\x20-\x7e]+$/.test(candidate)) {
+        parsed.payment_ref = candidate;
+        parsed.digest = data.subarray(off + 4 + len, off + 4 + len + 32).toString('hex');
+        break;
+      }
+    }
+  }
+  return {
+    receipt_id: null,
+    receipt_version: 1,
+    x402_payment_ref: parsed.payment_ref,
+    payment_signature: null,
+    deliverable_digest: parsed.digest,
+    outcome: 'settled',
+    amount: { value: '0.001', asset: 'USDC', chain: 'solana' },
+    receipt_uri: null,
+    pda: pda.toBase58(),
+    verifiable: true,
+    source: 'on-chain (store lookup missed; reconstructed from PDA)',
+  };
+}
+
+async function handleMcpRpc(rpc, ctx) {
+  const { store, config, service, serviceAta } = ctx;
+  const method = rpc.method;
+  if (method === 'initialize') {
+    return mcpResult(rpc.id, {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: { tools: {} },
+      serverInfo: { name: 'receiptrail', title: 'ReceiptRail — x402 Delivery Receipts', version: '0.2.0' },
+    });
+  }
+  if (method === 'notifications/initialized' || method?.startsWith('notifications/')) return null; // no body for notifications
+  if (method === 'tools/list') return mcpResult(rpc.id, { tools: MCP_TOOLS });
+  if (method === 'tools/call') {
+    const name = rpc.params?.name;
+    const args = rpc.params?.arguments ?? {};
+    if (name === 'get_receipt') {
+      const receiptId = args.receipt_id ?? args.payment_ref ?? args.payment_signature;
+      let receipt = store.receipts[receiptId];
+      if (!receipt) {
+        // store may have been wiped by a redeploy — receipt_id is sha256(payment_signature)[0:16]
+        if (typeof receiptId === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,100}$/.test(receiptId)) {
+          receipt = store.receipts[`r_${createHash('sha256').update(receiptId).digest().hexSlice(0, 16)}`];
+        }
+        if (!receipt) receipt = await receiptFromChain(service, receiptId); // treat as payment_ref
+      }
+      if (!receipt) return mcpResult(rpc.id, toolText({ error: 'receipt not found (try x402_payment_ref — receipts are recoverable on-chain via payment_ref)' }));
+      return mcpResult(rpc.id, toolText(receipt));
+    }
+    if (name === 'verify_receipt') {
+      const receiptId = args.receipt_id ?? args.payment_ref ?? args.payment_signature;
+      let receipt = store.receipts[receiptId];
+      if (!receipt) {
+        if (typeof receiptId === 'string' && /^[1-9A-HJ-NP-Za-km-z]{32,100}$/.test(receiptId)) {
+          receipt = store.receipts[`r_${createHash('sha256').update(receiptId).digest().hexSlice(0, 16)}`];
+        }
+        if (!receipt) receipt = await receiptFromChain(service, receiptId);
+      }
+      if (!receipt) return mcpResult(rpc.id, toolText({ error: 'receipt not found (try x402_payment_ref)' }));
+      const result = await verifyReceiptOnChain(receipt);
+      return mcpResult(rpc.id, toolText({ receipt_id: receipt.receipt_id, x402_payment_ref: receipt.x402_payment_ref, outcome: receipt.outcome, ...result }));
+    }
+    if (name === 'issue_receipt') {
+      const paymentRef = args.x402_payment_ref;
+      const digestHex = typeof args.deliverable_digest === 'string' ? args.deliverable_digest.replace(/^0x/, '').toLowerCase() : '';
+      if (typeof paymentRef !== 'string' || !paymentRef || paymentRef.length > 128) {
+        return mcpResult(rpc.id, toolText({ error: 'x402_payment_ref is required (1-128 chars)' }));
+      }
+      if (!/^[0-9a-f]{64}$/.test(digestHex)) {
+        return mcpResult(rpc.id, toolText({ error: 'deliverable_digest must be a 64-char SHA-256 hex string' }));
+      }
+      const signature = args.x402_payment_signature;
+      if (typeof signature !== 'string' || !signature) {
+        return mcpResult(rpc.id, toolText({
+          challenge: {
+            vendor: config.service,
+            amount: AMOUNT,
+            mint: config.mint,
+            report_id: paymentRef,
+            decimals: DECIMALS,
+            instructions: `Pay 0.001 USDC (mint ${config.mint}) to ${config.service} on Solana devnet, then call issue_receipt again with x402_payment_signature set to the payment transaction signature.`,
+          },
+        }));
+      }
+      if (store.byPayment[signature]) {
+        return mcpResult(rpc.id, toolText(store.receipts[store.byPayment[signature]]));
+      }
+      try { await verifyPayment(signature, config, serviceAta); }
+      catch (error) {
+        return mcpResult(rpc.id, toolText({ error: `payment verification failed: ${error.message}`, challenge: { vendor: config.service, amount: AMOUNT, mint: config.mint, report_id: paymentRef, decimals: DECIMALS } }));
+      }
+      let anchored;
+      try { anchored = await sendAnchorTransaction(service, paymentRef, digestHex); }
+      catch (error) { return mcpResult(rpc.id, toolText({ error: `receipt anchoring failed: ${error.message}` })); }
+      const receiptId = `r_${createHash('sha256').update(signature).digest().hexSlice(0, 16)}`;
+      const receipt = {
+        receipt_id: receiptId,
+        receipt_version: 1,
+        x402_payment_ref: paymentRef,
+        payment_signature: signature,
+        buyer: args.buyer ?? null,
+        seller: args.seller ?? null,
+        contract_digest: null,
+        deliverable_digest: digestHex,
+        checks: { C1: true, C2: true, C3: true, C4: true, C5: true },
+        outcome: 'pending',
+        amount: { value: '0.001', asset: 'USDC', chain: 'solana' },
+        timestamp: Math.floor(Date.now() / 1000),
+        receipt_uri: `solana:${anchored.tx}`,
+        pda: anchored.pda,
+        verifiable: false,
+        note: 'poll get_receipt until outcome === "settled"',
+      };
+      store.receipts[receiptId] = receipt;
+      store.byPayment[signature] = receiptId;
+      await saveStore(store);
+      confirmAnchorInBackground(store, receipt, anchored).catch((error) => {
+        console.error(`background confirm crashed: ${error.message}`);
+      });
+      return mcpResult(rpc.id, toolText(receipt));
+    }
+    return mcpError(rpc.id, -32602, `unknown tool: ${name}`);
+  }
+  return mcpError(rpc.id, -32601, `method not found: ${method}`);
+}
+
 async function main() {
   const keypairPath = process.env.AGENTTOLL_KEYPAIR
     ?? new URL('./service-keypair.json', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
@@ -317,14 +528,18 @@ async function main() {
 
     if (path.startsWith('/v1/receipt/') && request.method === 'GET') {
       const id = decodeURIComponent(path.slice('/v1/receipt/'.length));
-      const receipt = store.receipts[id];
-      if (!receipt) { jsonResponse(response, 404, { error: 'receipt not found' }); return; }
+      let receipt = store.receipts[id];
+      if (!receipt && /^[1-9A-HJ-NP-Za-km-z]{32,100}$/.test(id)) {
+        receipt = store.receipts[`r_${createHash('sha256').update(id).digest().hexSlice(0, 16)}`]; // id = payment signature
+      }
+      if (!receipt) receipt = await receiptFromChain(service, id).catch(() => null); // id = payment_ref
+      if (!receipt) { jsonResponse(response, 404, { error: 'receipt not found (tip: the x402_payment_ref always resolves on-chain)' }); return; }
       jsonResponse(response, 200, receipt);
       return;
     }
 
     if (path === '/v1/health' && request.method === 'GET') {
-      jsonResponse(response, 200, { ok: true, service: 'agenttoll-receipts', version: '0.1.0', chain: 'solana' });
+      jsonResponse(response, 200, { ok: true, service: 'receiptrail', product: 'ReceiptRail — x402 delivery receipts', version: '0.2.0', chain: 'solana' });
       return;
     }
 
@@ -346,6 +561,24 @@ async function main() {
         }
       }
       jsonResponse(response, 200, { healthyEndpoint: RPC_CANDIDATES[lastGood], egress: results });
+      return;
+    }
+
+    if (path === '/mcp' && request.method === 'POST') {
+      let rpc;
+      try { rpc = JSON.parse((await readBody(request)).toString('utf8') || '{}'); }
+      catch { jsonResponse(response, 400, mcpError(null, -32700, 'parse error')); return; }
+      try {
+        const result = await handleMcpRpc(rpc, { store, config, service, serviceAta });
+        if (result === null) { response.writeHead(202).end(); return; } // notification accepted
+        jsonResponse(response, 200, result);
+      } catch (error) {
+        jsonResponse(response, 200, mcpError(rpc?.id ?? null, -32603, `internal error: ${error.message}`));
+      }
+      return;
+    }
+    if (path === '/mcp' && request.method === 'GET') {
+      jsonResponse(response, 405, { error: 'stateless MCP server: POST JSON-RPC only (no SSE stream)' });
       return;
     }
 

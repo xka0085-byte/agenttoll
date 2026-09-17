@@ -1,31 +1,14 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.xka0085-byte/agenttoll-receipts",
-  "title": "AgentToll Receipts",
+  "name": "io.github.xka0085-byte/receiptrail",
+  "title": "ReceiptRail — x402 Delivery Receipts",
   "description": "On-chain x402 delivery receipts on Solana: hash-locked, verifiable proof of delivery.",
   "websiteUrl": "https://agenttoll-receipts.app.workbuddy.host",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "remotes": [
     {
       "type": "streamable-http",
       "url": "https://agenttoll-receipts.app.workbuddy.host/mcp"
-    }
-  ],
-  "tools": [
-    {
-      "name": "issue_receipt",
-      "title": "Issue delivery receipt",
-      "description": "Anchor a SHA-256 digest of delivered content plus the x402 settlement reference on Solana. Returns a permanent, publicly verifiable receipt URI. Use after a successful x402 settlement to give the buyer proof of delivery. Costs 0.001 USDC via x402 (founding sellers free)."
-    },
-    {
-      "name": "verify_receipt",
-      "title": "Verify delivery receipt",
-      "description": "Verify any AgentToll receipt against Solana state and return check results: PDA owner match, digest match, payment reference match. Use before accepting a paid delivery as final. Read-only, no cost."
-    },
-    {
-      "name": "get_receipt",
-      "title": "Get receipt details",
-      "description": "Fetch full receipt details by receipt id: digests, checks, outcome (settled/pending/failed), amount, buyer, seller, timestamp, PDA. Read-only, no cost."
     }
   ]
 }
