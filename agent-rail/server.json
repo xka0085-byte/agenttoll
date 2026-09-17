@@ -2,18 +2,15 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.xka0085-byte/agenttoll-receipts",
   "title": "AgentToll Receipts",
-  "description": "Issue and verify on-chain x402 delivery receipts on Solana. Hash-locked, escrow-grade, independently verifiable proof of delivery.",
-  "websiteUrl": "https://receipts.agenttoll.io",
-  "version": "0.1.0",
-  "remotes": {
-    "production": {
-      "transportType": "streamable-http",
-      "url": "https://receipts.agenttoll.io/mcp",
-      "headers": {
-        "Authorization": "Bearer ${AGENTTOLL_API_KEY}"
-      }
+  "description": "On-chain x402 delivery receipts on Solana: hash-locked, verifiable proof of delivery.",
+  "websiteUrl": "https://agenttoll-receipts.app.workbuddy.host",
+  "version": "0.1.1",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://agenttoll-receipts.app.workbuddy.host/mcp"
     }
-  },
+  ],
   "tools": [
     {
       "name": "issue_receipt",
@@ -23,12 +20,12 @@
     {
       "name": "verify_receipt",
       "title": "Verify delivery receipt",
-      "description": "Verify any AgentToll receipt against Solana state and return C1-C5 check results: contract match, deliverable match, tamper detection, timing, amount. Use before accepting a paid delivery as final. Read-only, no cost."
+      "description": "Verify any AgentToll receipt against Solana state and return check results: PDA owner match, digest match, payment reference match. Use before accepting a paid delivery as final. Read-only, no cost."
     },
     {
       "name": "get_receipt",
       "title": "Get receipt details",
-      "description": "Fetch full receipt details by receipt id: digests, checks, outcome (settled/refunded/expired), amount, buyer, seller, timestamp. Read-only, no cost."
+      "description": "Fetch full receipt details by receipt id: digests, checks, outcome (settled/pending/failed), amount, buyer, seller, timestamp, PDA. Read-only, no cost."
     }
   ]
 }
