@@ -547,7 +547,16 @@ async function main() {
     if (path === '/v1/receipt' && request.method === 'POST') {
       let body;
       try { body = JSON.parse((await readBody(request)).toString('utf8') || '{}'); }
-      catch { jsonResponse(response, 400, { error: 'invalid JSON body' }); return; }
+      catch { body = {}; }
+      const signature = request.headers['x-payment-signature'] ?? request.headers['payment-signature'];
+      // x402 convention: a request without payment credentials gets a 402 challenge FIRST,
+      // before any body validation — directory probes rely on this to detect the paywall.
+      if (typeof signature !== 'string' || !signature) {
+        const paymentRef = typeof body.x402_payment_ref === 'string' && body.x402_payment_ref ? body.x402_payment_ref : 'unspecified';
+        const challenge = challengeBody(config, paymentRef);
+        jsonResponse(response, 402, challenge, challengeHeaders(challenge));
+        return;
+      }
       const paymentRef = body.x402_payment_ref;
       const digestHex = typeof body.deliverable_digest === 'string' ? body.deliverable_digest.replace(/^0x/, '').toLowerCase() : '';
       if (typeof paymentRef !== 'string' || !paymentRef) {
@@ -555,11 +564,6 @@ async function main() {
       }
       if (!/^[0-9a-f]{64}$/.test(digestHex)) {
         jsonResponse(response, 400, { error: 'deliverable_digest must be a 64-char SHA-256 hex string' }); return;
-      }
-      const signature = request.headers['x-payment-signature'] ?? request.headers['payment-signature'];
-      if (typeof signature !== 'string' || !signature) {
-        const challenge = challengeBody(config, paymentRef);
-        jsonResponse(response, 402, challenge, challengeHeaders(challenge)); return;
       }
       // Idempotency: same payment signature → return the existing receipt (any state).
       if (store.byPayment[signature]) {
