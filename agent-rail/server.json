@@ -4,11 +4,28 @@
   "title": "ReceiptRail — x402 Delivery Receipts",
   "description": "On-chain x402 delivery receipts on Solana: hash-locked, verifiable proof of delivery.",
   "websiteUrl": "https://agenttoll-receipts.app.workbuddy.host",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "remotes": [
     {
       "type": "streamable-http",
       "url": "https://agenttoll-receipts.app.workbuddy.host/mcp"
+    }
+  ],
+  "tools": [
+    {
+      "name": "issue_receipt",
+      "title": "Issue delivery receipt",
+      "description": "After an x402 settlement on Solana, anchor a SHA-256 digest of the delivered content plus the settlement reference. Returns a permanent, publicly verifiable receipt so the buyer agent gets proof of delivery. Costs 0.001 USDC via x402; founding sellers free for 30 days."
+    },
+    {
+      "name": "verify_receipt",
+      "title": "Verify delivery receipt",
+      "description": "Verify any x402 delivery receipt against live Solana state before accepting a paid delivery as final: PDA owner must match the ReceiptRail program, stored digest and payment reference must match. Anti-fraud check, read-only, no cost."
+    },
+    {
+      "name": "get_receipt",
+      "title": "Get receipt details",
+      "description": "Fetch full x402 delivery receipt details by receipt id or payment reference: digests, checks, outcome (settled/pending/failed), amount, buyer, seller, timestamp, PDA. Read-only, no cost."
     }
   ]
 }

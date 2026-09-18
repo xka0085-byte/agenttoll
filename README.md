@@ -1,8 +1,25 @@
-# AgentToll
+# ReceiptRail (formerly AgentToll) — on-chain delivery receipts for x402
 
 [![CI](https://github.com/xka0085-byte/agenttoll/actions/workflows/ci.yml/badge.svg)](https://github.com/xka0085-byte/agenttoll/actions/workflows/ci.yml)
 
-AgentToll is a delivery-receipt protocol for AI-agent commerce on Solana. A vendor pins the SHA-256 digest of a report's exact bytes into a public PDA account on-chain. Anyone — the buyer, an auditor, a regulator — can independently recompute the digest from the delivered file and compare it against the chain, **without trusting the vendor, the buyer, or any API we operate**.
+**ReceiptRail** is an on-chain delivery-receipt service for x402 AI-agent payments on Solana: after a settlement, sellers anchor a SHA-256 digest of the delivered content plus the settlement reference into a public PDA. Anyone — the buyer agent, an auditor, a regulator — can independently verify what was delivered, **without trusting the vendor, the buyer, or any API we operate**.
+
+## ⚡ Live service (use it now)
+
+| Surface | Entry |
+|---|---|
+| MCP endpoint (streamable-http) | `https://agenttoll-receipts.app.workbuddy.host/mcp` |
+| Official MCP Registry | `io.github.xka0085-byte/receiptrail` |
+| npm (stdio MCP bridge) | `npx -y receiptrail-mcp` |
+| Agent Card / SKILL.md / llms.txt | `/.well-known/agent-card.json` · `/SKILL.md` · `/llms.txt` |
+| Pricing (0.001 USDC/receipt via x402) | https://agenttoll-receipts.app.workbuddy.host/ |
+| Tools | `issue_receipt` · `verify_receipt` · `get_receipt` |
+
+Keywords for agent discovery: x402 receipt, x402 escrow, delivery receipt, proof of delivery, Solana, USDC, MCP, AI-agent payments, verifiable settlement, receipt verification.
+
+---
+
+AgentToll is the delivery-receipt protocol behind ReceiptRail. A vendor pins the SHA-256 digest of a report's exact bytes into a public PDA account on-chain. Anyone can independently recompute the digest from the delivered file and compare it against the chain, without trusting anyone.
 
 > **"Don't trust what we say. Run the command."**
 > Every capability claim in this README maps to a command in this repo and, where possible, a Solscan link on devnet.
