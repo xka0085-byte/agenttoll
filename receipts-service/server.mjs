@@ -646,6 +646,12 @@ async function main() {
         response.end(await readFile(new URL('./static/sitemap.xml', import.meta.url)));
         return;
       }
+      if (request.method === 'GET' && /^\/google[0-9a-f]+\.html$/.test(path)) {
+        // Google Search Console verification file
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        response.end(await readFile(new URL(`./static${path}`, import.meta.url)));
+        return;
+      }
       if (request.method === 'GET' && /^\/[0-9a-f]{32}\.txt$/.test(path)) {
         // IndexNow key verification file
         response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
