@@ -1,0 +1,67 @@
+{
+  "serverInfo": {
+    "name": "ReceiptRail",
+    "version": "0.2.1",
+    "description": "x402 delivery receipts on Solana: anchor a SHA-256 digest of delivered content into a Solana PDA after an x402 settlement; buyer agents verify proof of delivery offline, forever, with zero trust in the seller."
+  },
+  "authentication": {
+    "required": false
+  },
+  "tools": [
+    {
+      "name": "issue_receipt",
+      "description": "Anchor an on-chain delivery receipt on Solana (0.001 USDC): commits the SHA-256 digest of delivered content plus the settlement reference into a PDA. Use after an x402 payment settles. Returns receipt id, PDA address, tx signature.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "report_id",
+          "deliverable_digest"
+        ],
+        "properties": {
+          "report_id": {
+            "type": "string"
+          },
+          "deliverable_digest": {
+            "type": "string",
+            "description": "SHA-256 hex of delivered content"
+          },
+          "x402_payment_signature": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "verify_receipt",
+      "description": "Independently verify a ReceiptRail delivery receipt against Solana on-chain state: recomputes the PDA, compares the anchored digest, returns valid/invalid with tx details. Use to prove what was delivered without trusting the seller.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "receipt_id"
+        ],
+        "properties": {
+          "receipt_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_receipt",
+      "description": "Fetch a ReceiptRail receipt record (anchored digest, settlement ref, tx signature, timestamps) by id for reporting or dispute evidence.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "receipt_id"
+        ],
+        "properties": {
+          "receipt_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "resources": [],
+  "prompts": []
+}

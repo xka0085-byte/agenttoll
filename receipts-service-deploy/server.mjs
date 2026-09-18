@@ -506,6 +506,11 @@ async function main() {
         jsonResponse(response, 200, JSON.parse(await readFile(new URL('./static/.well-known/mcp/server.json', import.meta.url))));
         return;
       }
+      if (request.method === 'GET' && path === '/.well-known/mcp/server-card.json') {
+        // Smithery static fallback (SEP-1649) if live scan fails
+        jsonResponse(response, 200, JSON.parse(await readFile(new URL('./static/.well-known/mcp/server-card.json', import.meta.url))));
+        return;
+      }
       if (request.method === 'GET' && path === '/.well-known/x402') {
         // x402 ecosystem discovery (x402scan compatibility fan-out)
         jsonResponse(response, 200, JSON.parse(await readFile(new URL('./static/.well-known/x402', import.meta.url))));
