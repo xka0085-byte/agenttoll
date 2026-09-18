@@ -17,6 +17,8 @@ const {
 const PROGRAM_ID = new PublicKey('8ACN1KNEFXM2N2FMzxTfAzB1c3g5n47ZuhbPoUXPnCTp');
 const AMOUNT = '1000'; // 0.001 USDC, 6 decimals
 const DECIMALS = 6;
+const PUBLIC_BASE = 'https://agenttoll-receipts.app.workbuddy.host';
+const SOLANA_DEVNET_CAIP2 = 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1'; // CAIP-2 network id used by x402 v2
 const STORE_PATH = new URL('./receipts-store.json', import.meta.url);
 
 // --- RPC fallback chain: probe candidates with body validation, remember the healthy one ---
@@ -104,14 +106,50 @@ function readBody(request) {
 }
 
 function challengeBody(config, paymentRef, reason = 'payment required') {
+  // x402 v2 shape (accepts[] in token atomic units) for ecosystem directories (x402scan etc.),
+  // plus legacy `challenge` object for backward compatibility with earlier integrations.
+  const legacy = { vendor: config.service, amount: AMOUNT, mint: config.mint, report_id: paymentRef, decimals: DECIMALS };
   return {
-    challenge: {
-      vendor: config.service,
-      amount: AMOUNT,
-      mint: config.mint,
-      report_id: paymentRef,
-      decimals: DECIMALS,
+    x402Version: 2,
+    ...(reason !== 'payment required' ? { error: reason } : {}),
+    resource: {
+      url: `${PUBLIC_BASE}/v1/receipt`,
+      description: 'ReceiptRail — anchor an on-chain x402 delivery receipt on Solana (0.001 USDC)',
+      mimeType: 'application/json',
     },
+    accepts: [
+      {
+        scheme: 'exact',
+        network: SOLANA_DEVNET_CAIP2,
+        amount: AMOUNT,
+        asset: config.mint,
+        payTo: config.service,
+        maxTimeoutSeconds: 60,
+        extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service },
+      },
+    ],
+    extensions: {
+      bazaar: {
+        info: {
+          input: {
+            type: 'http',
+            method: 'POST',
+            bodyType: 'json',
+            bodySchema: {
+              type: 'object',
+              required: ['x402_payment_ref', 'deliverable_digest'],
+              properties: {
+                x402_payment_ref: { type: 'string', description: 'Unique settlement reference (1-128 chars)' },
+                deliverable_digest: { type: 'string', description: 'SHA-256 hex digest of the delivered content' },
+                buyer: { type: 'string', description: 'Optional buyer wallet address' },
+                seller: { type: 'string', description: 'Optional seller wallet address' },
+              },
+            },
+          },
+        },
+      },
+    },
+    challenge: legacy,
     reason,
   };
 }
@@ -369,14 +407,17 @@ async function handleMcpRpc(rpc, ctx) {
       const signature = args.x402_payment_signature;
       if (typeof signature !== 'string' || !signature) {
         return mcpResult(rpc.id, toolText({
-          challenge: {
-            vendor: config.service,
+          x402Version: 2,
+          accepts: [{
+            scheme: 'exact',
+            network: SOLANA_DEVNET_CAIP2,
             amount: AMOUNT,
-            mint: config.mint,
-            report_id: paymentRef,
-            decimals: DECIMALS,
-            instructions: `Pay 0.001 USDC (mint ${config.mint}) to ${config.service} on Solana devnet, then call issue_receipt again with x402_payment_signature set to the payment transaction signature.`,
-          },
+            asset: config.mint,
+            payTo: config.service,
+            maxTimeoutSeconds: 60,
+            extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service },
+          }],
+          instructions: `Pay 0.001 USDC (mint ${config.mint}) to ${config.service} on Solana devnet, then call issue_receipt again with x402_payment_signature set to the payment transaction signature.`,
         }));
       }
       if (store.byPayment[signature]) {
@@ -384,7 +425,7 @@ async function handleMcpRpc(rpc, ctx) {
       }
       try { await verifyPayment(signature, config, serviceAta); }
       catch (error) {
-        return mcpResult(rpc.id, toolText({ error: `payment verification failed: ${error.message}`, challenge: { vendor: config.service, amount: AMOUNT, mint: config.mint, report_id: paymentRef, decimals: DECIMALS } }));
+        return mcpResult(rpc.id, toolText({ error: `payment verification failed: ${error.message}`, x402Version: 2, accepts: [{ scheme: 'exact', network: SOLANA_DEVNET_CAIP2, amount: AMOUNT, asset: config.mint, payTo: config.service, maxTimeoutSeconds: 60, extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service } }] }));
       }
       let anchored;
       try { anchored = await sendAnchorTransaction(service, paymentRef, digestHex); }
@@ -463,6 +504,23 @@ async function main() {
       if (request.method === 'GET' && path === '/.well-known/mcp/server.json') {
         // official MCP Registry auto-discovery path
         jsonResponse(response, 200, JSON.parse(await readFile(new URL('./static/.well-known/mcp/server.json', import.meta.url))));
+        return;
+      }
+      if (request.method === 'GET' && path === '/.well-known/x402') {
+        // x402 ecosystem discovery (x402scan compatibility fan-out)
+        jsonResponse(response, 200, JSON.parse(await readFile(new URL('./static/.well-known/x402', import.meta.url))));
+        return;
+      }
+      if (request.method === 'GET' && path === '/openapi.json') {
+        // x402scan OpenAPI-first discovery (source of truth for directories)
+        response.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        response.end(await readFile(new URL('./static/openapi.json', import.meta.url)));
+        return;
+      }
+      if ((request.method === 'GET' || request.method === 'HEAD') && path === '/favicon.svg') {
+        // HEAD support: directory auditors probe favicons with HEAD first
+        response.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8' });
+        response.end(request.method === 'GET' ? await readFile(new URL('./static/favicon.svg', import.meta.url)) : undefined);
         return;
       }
       if (request.method === 'GET' && path === '/sitemap.xml') {

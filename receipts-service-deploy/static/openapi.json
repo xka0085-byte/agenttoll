@@ -1,0 +1,164 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ReceiptRail — x402 Delivery Receipts on Solana",
+    "version": "0.2.1",
+    "description": "After an x402 settlement, anchor a SHA-256 digest of the delivered content plus the settlement reference into a Solana PDA. Buyer agents verify proof of delivery offline, forever, with zero trust in the seller. Don't hand-roll verification logic — one MCP call returns a chain-anchored receipt.",
+    "contact": {
+      "name": "ReceiptRail",
+      "url": "https://agenttoll-receipts.app.workbuddy.host/",
+      "email": "xka0085@gmail.com"
+    },
+    "x-discovery": {
+      "mcp": "https://agenttoll-receipts.app.workbuddy.host/mcp",
+      "registry": "io.github.xka0085-byte/receiptrail",
+      "npm": "receiptrail-mcp"
+    },
+    "x-guidance": "Free endpoints: GET /v1/receipt/{id} (lookup by receipt_id, payment signature, or x402_payment_ref — payment_ref always resolves on-chain) and GET /v1/health. Paid endpoint: POST /v1/receipt anchors a delivery receipt on Solana for 0.001 USDC via x402; poll the GET endpoint until outcome === settled. Founding sellers (first 10) free for 30 days. Program ID 8ACN1KNEFXM2N2FMzxTfAzB1c3g5n47ZuhbPoUXPnCTp."
+  },
+  "security": [
+    {
+      "none": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "https://agenttoll-receipts.app.workbuddy.host"
+    }
+  ],
+  "paths": {
+    "/v1/receipt": {
+      "post": {
+        "summary": "Issue an on-chain delivery receipt",
+        "description": "Anchor a SHA-256 digest of delivered content plus the x402 settlement reference on Solana. Without a payment signature, returns 402 with an x402 v2 challenge (0.001 USDC). With a valid signature, verifies the payment and submits the receipt anchor transaction; returns 202 pending, poll GET /v1/receipt/{receipt_id} until outcome === settled.",
+        "operationId": "issue_receipt",
+        "x-payment-info": {
+          "protocols": [
+            {
+              "x402": {
+                "version": 2,
+                "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"
+              }
+            }
+          ],
+          "price": {
+            "mode": "fixed",
+            "currency": "USD",
+            "amount": "0.001"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "x402_payment_ref",
+                  "deliverable_digest"
+                ],
+                "properties": {
+                  "x402_payment_ref": {
+                    "type": "string",
+                    "description": "Unique settlement reference (1-128 chars)"
+                  },
+                  "deliverable_digest": {
+                    "type": "string",
+                    "description": "SHA-256 hex digest of the delivered content (64 chars)"
+                  },
+                  "buyer": {
+                    "type": "string",
+                    "description": "Optional buyer wallet address"
+                  },
+                  "seller": {
+                    "type": "string",
+                    "description": "Optional seller wallet address"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Receipt already existed for this payment signature (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Receipt registered, anchor transaction submitted (outcome=pending, poll until settled)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment required — x402 v2 challenge with accepts[] (0.001 USDC, Solana devnet)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/receipt/{id}": {
+      "get": {
+        "summary": "Get or verify a delivery receipt",
+        "description": "Fetch full receipt details by receipt_id, payment signature, or x402_payment_ref (payment_ref always resolves on-chain). Read-only, no cost.",
+        "operationId": "get_receipt",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "receipt_id, payment signature, or x402_payment_ref"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Receipt details (outcome settled/pending/failed, digests, checks, PDA)"
+          },
+          "404": {
+            "description": "Receipt not found"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "summary": "Service health probe",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service status"
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "none": {
+        "type": "http",
+        "description": "No auth for free endpoints; paid endpoint uses x402 payment signature header instead of bearer tokens"
+      }
+    }
+  }
+}

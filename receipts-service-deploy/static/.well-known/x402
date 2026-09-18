@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "resources": [
+    "https://agenttoll-receipts.app.workbuddy.host/v1/receipt"
+  ],
+  "instructions": "POST /v1/receipt issues an on-chain x402 delivery receipt on Solana (0.001 USDC). MCP: https://agenttoll-receipts.app.workbuddy.host/mcp"
+}
