@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "receiptrail": {
+      "url": "https://agenttoll-receipts.app.workbuddy.host/mcp"
+    }
+  }
+}
