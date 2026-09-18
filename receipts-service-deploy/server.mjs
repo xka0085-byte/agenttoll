@@ -460,6 +460,22 @@ async function main() {
         jsonResponse(response, 200, JSON.parse(await readFile(new URL('./static/.well-known/agent-card.json', import.meta.url))));
         return;
       }
+      if (request.method === 'GET' && path === '/.well-known/mcp/server.json') {
+        // official MCP Registry auto-discovery path
+        jsonResponse(response, 200, JSON.parse(await readFile(new URL('./static/.well-known/mcp/server.json', import.meta.url))));
+        return;
+      }
+      if (request.method === 'GET' && path === '/sitemap.xml') {
+        response.writeHead(200, { 'content-type': 'application/xml; charset=utf-8' });
+        response.end(await readFile(new URL('./static/sitemap.xml', import.meta.url)));
+        return;
+      }
+      if (request.method === 'GET' && /^\/[0-9a-f]{32}\.txt$/.test(path)) {
+        // IndexNow key verification file
+        response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        response.end(await readFile(new URL(`./static${path}`, import.meta.url)));
+        return;
+      }
     } catch (error) {
       jsonResponse(response, 500, { error: `static asset unavailable: ${error.message}` });
       return;

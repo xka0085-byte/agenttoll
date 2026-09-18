@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>AgentToll 答辩知识手册</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f4f0; color: #2c2c2a; line-height: 1.7; padding: 32px 16px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 600; margin-bottom: 4px; }
+  .sub { color: #5f5e5a; margin-bottom: 28px; font-size: 14px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 36px 0 12px; padding-top: 20px; border-top: 2px solid #d3d1c7; }
+  h3 { font-size: 16px; font-weight: 600; margin: 20px 0 8px; }
+  p, li { font-size: 14px; margin-bottom: 8px; }
+  .card { background: #fff; border: 1px solid #d3d1c7; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; }
+  .q { font-weight: 600; color: #3c3489; margin-bottom: 6px; }
+  .en { background: #eeedfe; border-left: 3px solid #534ab7; padding: 8px 12px; border-radius: 0 8px 8px 0; font-size: 13px; margin: 6px 0; }
+  .cn { font-size: 13px; color: #444441; }
+  .tag { display: inline-block; font-size: 12px; background: #e1f5ee; color: #085041; border-radius: 6px; padding: 1px 8px; margin-right: 6px; }
+  .tag.red { background: #fcebeb; color: #791f1f; }
+  .tag.amber { background: #faeeda; color: #633806; }
+  .warn { background: #faeeda; border-left: 3px solid #ba7517; padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; margin: 10px 0; }
+  .good { background: #eaf3de; border-left: 3px solid #639922; padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; margin: 10px 0; }
+  code { background: #f1efe8; border-radius: 4px; padding: 1px 6px; font-size: 13px; font-family: Consolas, monospace; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th, td { border: 1px solid #d3d1c7; padding: 6px 10px; text-align: left; }
+  th { background: #f1efe8; font-weight: 600; }
+  .num { font-weight: 600; color: #0f6e56; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>AgentToll 答辩知识手册</h1>
+<div class="sub">目标：每个问题都能用 30 秒讲清楚。先读概念（第 1 部分），再背 5 句话版本（第 2 部分），最后过问答（第 3 部分）。英文句子直接背，中文是帮你理解的。</div>
+
+<h2>一、核心概念（6 个，全部要能用大白话讲）</h2>
+
+<div class="card">
+<h3>1. SHA-256 指纹（整个项目的地基）</h3>
+<p>任何文件，不管多大，用 SHA-256 算出一个 <b>64 位十六进制指纹</b>。特点：<b>改一个字节，指纹完全变</b>；从指纹反推不出文件。</p>
+<p>类比：快递箱上的封条。发货时贴上（上链），收货时看封条完不完整（验指纹）。封条完整 = 箱子没被动过。</p>
+<p>一句话：<code>sha256(报告文件) = 80d830dd...414f2</code>，这个值我们在 demo 里真实算过、真实上链过。</p>
+</div>
+
+<div class="card">
+<h3>2. PDA（Program Derived Account，程序衍生账户）</h3>
+<p>Solana 的一种特殊账户：<b>地址由「程序 ID + 种子」数学推导出来</b>，它没有私钥，只有对应的程序才有权控制它。</p>
+<p>我们的收据账户种子 = <code>(vendor 钱包, report_id)</code>。同样输入永远推出同一个地址——所以收据账户的位置是「算出来」的，不是「随机生成」的。验证器 C2 就是重新算一遍，看链上账户地址和算出来的是否一致。</p>
+<p>类比：保险柜的编号由「店主+单号」决定，钥匙只有程序（银行）手里有，谁也不能用私钥偷开。</p>
+</div>
+
+<div class="card">
+<h3>3. x402 流程（为什么会有这个市场缺口）</h3>
+<p>HTTP 402 = 「Payment Required」状态码，1997 年就定义了但一直没用。x402 把它激活：</p>
+<p>① agent 请求付费 API → ② 服务器返回 402 + 付款要求（多少钱、付给谁、什么币）→ ③ agent 链上付款 → ④ 带着「付款签名」重新请求 → ⑤ 服务端验证 → 交付内容。</p>
+<p><b>关键卖点</b>：Coinbase CDP、Cloudflare、0x、AWS 全在推 x402，但整条链路到「钱付了」就结束了。<b>没有任何一方证明「交付的内容是什么」</b>——这就是 AgentToll 补的缺口。评委问竞争，就答这句：They prove payment happened; we prove what was delivered.</p>
+</div>
+
+<div class="card">
+<h3>4. 五项检查 C1–C5（验证器 = 产品本身）</h3>
+<table>
+<tr><th>检查</th><th>名字</th><th>防什么</th></tr>
+<tr><td class="num">C1</td><td>ownership 所有权</td><td>这个账户真的属于我们的程序吗（防止伪造一个假账户）</td></tr>
+<tr><td class="num">C2</td><td>pda_derivation 推导</td><td>账户地址真的是从 (vendor, report_id) 算出来的吗（防止张冠李戴）</td></tr>
+<tr><td class="num">C3</td><td>schema 布局</td><td>账户数据是标准的 149 字节格式吗（防止结构被改）</td></tr>
+<tr><td class="num">C4</td><td>content_binding 内容绑定</td><td>文件指纹 == 链上指纹吗（<b>核心检查，改一个字节就 FAIL</b>）</td></tr>
+<tr><td class="num">C5</td><td>freshness 时效</td><td>收据创建时间合理吗 + vendor 是预期的那个吗（防旧收据冒充）</td></tr>
+</table>
+<p>记忆法：<b>「谁的账、算得对不对、格式对不对、内容对不对、新不新」</b>。</p>
+</div>
+
+<div class="card">
+<h3>5. 防篡改规则（DigestConflict，链上强制）</h3>
+<p>收据账户由 (vendor, report_id) 推导 → <b>每个组合只能存在一个收据</b>：</p>
+<ul>
+<li>同 id + 同 digest 再提交 = 幂等，无害（重复交付场景）</li>
+<li>同 id + <b>不同</b> digest = 合约直接报 <code>DigestConflict</code> 错误拒绝</li>
+<li>程序根本没有「修改/覆盖」指令 → 覆盖在协议层不可能，不是「不允许」</li>
+</ul>
+<p>这防的是 <b>vendor 事后偷换报告</b>：交付时上链了版本 A 的指纹，之后想改口说交付的是版本 B？链上拒绝。防篡改不是靠承诺，是靠链上规则——这是我们和所有「收据平台」的本质区别。</p>
+</div>
+
+<div class="card">
+<h3>6. 诚实声明（主动说，别等人问）</h3>
+<p><span class="tag red">test-USDC</span> devnet 上自己发行的测试币，无真实价值；<span class="tag red">单 vendor</span> demo 是本机服务，不是托管产品；<span class="tag red">未审计</span> 没有第三方安全审计；<span class="tag amber">付款签名</span> 通过 demo 流程关联，未存上链（W1 schema 冻结，roadmap 可扩展）。</p>
+<div class="good">主动披露 = 可信度。评审最反感的是夸大，不是不完美。我们的 README 把这些全写在 "Scope & limitations" 里。</div>
+</div>
+
+<h2>二、先背这 5 句话（一分钟电梯版）</h2>
+<div class="card">
+<ol>
+<li><b>问题</b>：AI agent 越来越多地在链上付钱买服务（x402 模式），但付完钱，它拿到的「回执」是卖家自己开的——和伪造无法区分。</li>
+<li><b>方案</b>：AgentToll 把交付内容的 SHA-256 指纹写进 Solana 上一个程序持有的收据账户。</li>
+<li><b>防线</b>：收据账户由 (vendor, report_id) 推导、只能创建一次；同 id 不同指纹，链上直接拒绝——防篡改是规则，不是承诺。</li>
+<li><b>验证</b>：任何人一条命令离线跑 5 项检查，改一个字节 C4 就 FAIL。不用信我们，跑命令就行。</li>
+<li><b>证据</b>：devnet 真实部署 + 真实付款/收据交易 + 8 个测试 + CI 绿 + 三份审计报告，全部公开可查。</li>
+</ol>
+<p style="margin-top:10px"><b>英文浓缩版（背这个）：</b></p>
+<p class="en">"x402 proves payment happened. AgentToll proves what was delivered. The vendor pins the SHA-256 digest of the delivered content on Solana; same id with a different digest is rejected on-chain; anyone verifies offline with one command."</p>
+</div>
+
+<h2>三、评委问答（23 题）</h2>
+
+<h3>▍技术类</h3>
+
+<div class="card">
+<div class="q">Q1. What does AgentToll do, in one sentence?</div>
+<div class="en">"AgentToll gives AI-agent payments something they're missing: a tamper-evident, on-chain record of what was actually delivered, verifiable offline by anyone."</div>
+<div class="cn">AgentToll 给 AI agent 支付补上缺失的一环：交付内容的防篡改链上记录，任何人可离线验证。</div>
+</div>
+
+<div class="card">
+<div class="q">Q2. Walk me through the flow.</div>
+<div class="en">"Buyer agent GETs a report, gets HTTP 402 with the payment challenge, pays via SPL transferChecked, retries with the payment signature. The vendor verifies that payment on-chain, then calls create_receipt to pin the SHA-256 digest of the exact report bytes. Later, anyone runs the offline verifier: five checks against the chain, PASS or FAIL."</div>
+<div class="cn">见上面流程图 5 步。注意每个环节都点名一个具体机制（402 / transferChecked / create_receipt / 五检查），显得你真的做过。</div>
+</div>
+
+<div class="card">
+<div class="q">Q3. Why Solana?</div>
+<div class="en">"Three reasons: transaction fees are a fraction of a cent, which is required for per-receipt economics at agent scale; SPL tokens and transferChecked give clean payment primitives; and the ecosystem already runs most agent payments. Also, honestly, our build-and-audit toolchain on Solana is mature."</div>
+<div class="cn">费率（收据经济需要近乎零成本）+ SPL 原语干净 + agent 支付本就集中在 Solana。</div>
+</div>
+
+<div class="card">
+<div class="q">Q4. ⚠️ 最尖锐：What stops the vendor from writing a fake digest in the first place?</div>
+<div class="en">"Nothing stops the vendor from writing a digest — but a digest only has value if it matches what was actually delivered. If the vendor pins a digest of content it never sends, the buyer's verifier fails at C4, and the receipt becomes evidence AGAINST the vendor. Combined with the one-receipt-per-id rule, the vendor cannot quietly swap content after the fact. We shift trust from 'the vendor is honest' to 'the vendor is consistent' — and consistency is checkable."</div>
+<div class="cn">没人阻止 vendor 写假指纹——但假指纹只有在与真实交付内容匹配时才有价值。写了假指纹，买家验 C4 必 FAIL，收据反而变成对 vendor 不利的证据。加上「同 id 只能有一条收据」，vendor 无法事后偷换。我们把信任从「vendor 诚实」转为「vendor 一致」，而一致性是可检验的。</div>
+<div class="warn">这题一定会被问。核心逻辑链：写假指纹没有收益 → 只有真交付才能通过买家验证 → 所以指纹诚实是 vendor 的最优策略。</div>
+</div>
+
+<div class="card">
+<div class="q">Q5. Why is the receipt tamper-proof?</div>
+<div class="en">"The receipt account is a PDA seeded by vendor and report_id. create_receipt is the only write instruction, and it enforces: same id + same digest = idempotent, same id + different digest = DigestConflict error. There is no update or overwrite instruction at all. So overwriting isn't discouraged — it's impossible at the protocol level."</div>
+<div class="cn">PDA 推导 + 唯一写指令 + DigestConflict + 无覆盖指令 = 协议层不可能篡改。</div>
+</div>
+
+<div class="card">
+<div class="q">Q6. What's a PDA? Why no private key?</div>
+<div class="en">"A Program Derived Address: an account whose address is derived from the program id plus seeds. It has no private key, so nobody can sign for it directly — only the owning program can act on it, and only in ways the program's code allows."</div>
+<div class="cn">地址是「算出来」的，没有私钥 → 没人能绕过程序直接操作它。这就是「收据不被任何人（包括我们自己）篡改」的根源。</div>
+</div>
+
+<div class="card">
+<div class="q">Q7. What if the buyer loses the delivered file?</div>
+<div class="en">"Then content binding can't be checked — but that's by design. The receipt proves what was delivered at that moment; it doesn't archive content. If you want recoverability, the roadmap includes optional content storage like IPFS alongside the receipt."</div>
+<div class="cn">收据证明「当时交付了什么」，不替你保存内容。要可恢复，roadmap 有 IPFS 选项。诚实 + 有规划。</div>
+</div>
+
+<div class="card">
+<div class="q">Q8. Why is the account 149 bytes?</div>
+<div class="en">"Eight bytes for the Anchor discriminator plus 141 bytes for the Receipt struct's INIT_SPACE under anchor-lang 1.2.0. We measured it on-chain, and check C3 enforces exactly 149 so any schema drift fails loudly."</div>
+<div class="cn">8 (discriminator) + 141 (INIT_SPACE 实测) = 149。C3 强制校验，格式漂移会大声失败。这个数字说得出来 = 真的懂。</div>
+</div>
+
+<div class="card">
+<div class="q">Q9. The payment signature isn't stored on-chain — isn't that a gap?</div>
+<div class="en">"Yes, and we disclose it. The frozen W1 schema binds report_id and digest; the payment link is established by the demo flow and verifiable off-chain. Extending the account to carry the payment signature is a planned, backward-compatible change — but we chose not to break the frozen schema mid-hackathon."</div>
+<div class="cn">承认 + 解释为什么（schema 冻结纪律）+ 有规划。这种回答比硬拗可信十倍。</div>
+</div>
+
+<div class="card">
+<div class="q">Q10. Why not just use a facilitator's signed receipt (like XRPL's x402)?</div>
+<div class="en">"A facilitator receipt proves payment happened and requires trusting the facilitator forever. Ours proves what was delivered and requires trusting no one after creation — verification is against a public ledger. Different guarantees for a different problem."</div>
+<div class="cn">facilitator 收据 = 付款凭证 + 永久信任第三方；我们 = 交付凭证 + 创建后零信任。</div>
+</div>
+
+<div class="card">
+<div class="q">Q11. test-USDC? So this isn't real?</div>
+<div class="en">"Correct, and we say so everywhere. Devnet mint, self-issued, zero value. Swapping to mainnet USDC changes no protocol logic — the receipt layer doesn't care which token settles the payment."</div>
+<div class="cn">大方承认：测试币就是测试币。换主网 USDC 不需要改协议逻辑（收据层不关心结算用什么币）。</div>
+</div>
+
+<div class="card">
+<div class="q">Q12. What about replay attacks?</div>
+<div class="en">"Two layers. Payment replay: the same signature is processed idempotently — no double delivery. Receipt replay: same id + same digest is idempotent too; same id + different digest is rejected. Nothing can be reused to produce a different outcome."</div>
+<div class="cn">付款重放 = 幂等；收据重放 = 幂等或拒绝。任何重放都不能产生不同结果。</div>
+</div>
+
+<div class="card">
+<div class="q">Q13. Does this scale? Every receipt is a transaction.</div>
+<div class="en">"A Solana transaction costs a fraction of a cent. If a paid report sells for $0.01, a receipt costing ~0.000005 SOL is noise. Batching receipts per vendor per interval is also possible if volume demands it."</div>
+<div class="cn">成本占比可忽略；量大还能按周期批量。一句话把规模质疑挡回去。</div>
+</div>
+
+<h3>▍商业类</h3>
+
+<div class="card">
+<div class="q">Q14. How do you make money?</div>
+<div class="en">"A per-receipt toll fee — a small fixed fee on create_receipt once on mainnet, priced for agent-scale volume. The name is the business model."</div>
+<div class="cn">每笔回收小额过路费（toll）。名字即商业模式，这句评委记得住。</div>
+</div>
+
+<div class="card">
+<div class="q">Q15. Who are the customers?</div>
+<div class="en">"Near term: vendors running x402-style paid endpoints who want a trust marker. Medium: agent platforms and marketplaces that need delivery evidence for disputes. Long: auditors, insurers, and compliance tooling built on the receipt layer."</div>
+<div class="cn">近期 vendor → 中期 agent 平台/市场 → 长期审计/保险/合规。三层客户递进。</div>
+</div>
+
+<div class="card">
+<div class="q">Q16. Why would a vendor adopt it?</div>
+<div class="en">"Because 'verifiable delivery' becomes a sales argument. Today every vendor self-attests; the first ones who let buyers verify independently stand out the way payment processors with public status pages do. It also cuts dispute costs — evidence already exists, no he-said-she-said."</div>
+<div class="cn">可验证交付变成卖点 + 争议成本直接下降（证据现成，不用扯皮）。</div>
+</div>
+
+<div class="card">
+<div class="q">Q17. Competitors?</div>
+<div class="en">"The x402 stack — Coinbase CDP, Cloudflare, 0x — all handle payment settlement, and XRPL's facilitator issues payment receipts. None of them prove delivered content. In the Solana ecosystem we haven't found a direct equivalent. We sit one layer above settlement."</div>
+<div class="cn">他们都做「付款凭证」，没人做「交付凭证」。我们比结算高一层的空白位。</div>
+</div>
+
+<div class="card">
+<div class="q">Q18. What's the moat?</div>
+<div class="en">"Honestly, protocol-level moats are thin — a hash on chain is simple by design. The moat is execution: first mover in the x402 delivery-receipt slot, a working audited implementation, and becoming the default verifier package agent frameworks import. Simplicity is the feature."</div>
+<div class="cn">诚实：协议层护城河薄（刻意简单）。护城河=执行速度+先发+成为默认验证包。<b>别吹技术壁垒，吹执行。</b></div>
+</div>
+
+<div class="card">
+<div class="q">Q19. Roadmap?</div>
+<div class="en">"Mainnet USDC settlement, multi-vendor registry, the verifier published as an npm package for agent frameworks, and a third-party security audit before any real money flows."</div>
+<div class="cn">主网结算 → 多 vendor → npm 验证包 → 专业审计。顺序合理（先审计后真钱）。</div>
+</div>
+
+<h3>▍质疑/压力类</h3>
+
+<div class="card">
+<div class="q">Q20. ⚠️ AI wrote all the code — how do you know it's correct?</div>
+<div class="en">"Because we didn't trust it — we verified it. Our process separates writing from auditing: one agent wrote against a written spec, an independent agent instance audited every milestone with real command outputs, and everything is independently checkable: 8 tests, a 5-check offline verifier, devnet transactions anyone can open, and CI on a separate machine. The evidence doesn't care who typed the code."</div>
+<div class="cn">我们不信任 AI——我们验证它。写/审分离 + 测试 + 链上证据 + CI，<b>证据不关心代码是谁敲的</b>。这句就是我们整个项目的哲学，也是你个人的答辩武器。</div>
+<div class="good">这题答好了反而是全场亮点：你展示的不是「我会写代码」，而是「我会建立让任何人都能验证的系统」——这是创始人能力，不是码农能力。</div>
+</div>
+
+<div class="card">
+<div class="q">Q21. Solo student, no team — why back you?</div>
+<div class="en">"Judge by output, not by headcount. In this hackathon I shipped a deployed program, tests, verifier, audits, CI, and docs — in a fraction of the usual time, because AI agents do the typing and I do the directing. My job is product judgment, quality control, and learning faster than the market moves. That ratio is exactly what I'd scale with funding."</div>
+<div class="cn">按产出评判，别按人数。你的角色=产品判断+质控+比市场更快地学。资金用来放大这个比例。</div>
+</div>
+
+<div class="card">
+<div class="q">Q22. "This is just a hash on chain — trivial."</div>
+<div class="en">"Yes — deliberately. Simple means verifiable, and verifiable means trustworthy; that's the point of a trust primitive. The non-trivial parts are the rule design (what to bind, when to reject) and putting it in the right slot of a live payment stack. Simple primitives at the right place is how real standards happen."</div>
+<div class="cn">「简单」是特性不是缺陷。信任原语必须简单才能可信。不简单的是规则设计和在真实支付栈里找准位置。</div>
+</div>
+
+<div class="card">
+<div class="q">Q23. What did YOU do, specifically, if AI wrote the code?</div>
+<div class="en">"I owned the product and the quality gates. I wrote the specs the agents coded against, ruled on design conflicts like the PDA seed-size limit, defined acceptance criteria for every milestone, and refused deliveries that didn't pass. The AI did the typing; the decisions, the discipline, and the responsibility are mine."</div>
+<div class="cn">我负责：写规格、裁决设计冲突（比如 PDA seed 32 字节限制那次）、定义验收标准、拒收不合格交付。AI 打字，决策和责任是我的。每个例子都是真实发生过的（W1 的 64→32 修正就是实例）。</div>
+</div>
+
+<h2>四、学习路径（建议 3 轮）</h2>
+<div class="card">
+<p><span class="tag">第 1 轮 · 30 分钟</span> 读第一部分 6 个概念，合上手册，用自己的话把流程图讲一遍（讲给我听，我纠错）。</p>
+<p><span class="tag">第 2 轮 · 1 小时</span> 背 Q1/Q4/Q5/Q20 的英文版（这 4 题是必考题）。其他题先读熟中文逻辑。</p>
+<p><span class="tag">第 3 轮 · 模拟答辩</span> 我扮演评委连问 10 题（从 23 题里随机+追问），你答，我指出哪句站不住、哪句该慢。练到你被追问两层不慌为止。</p>
+<div class="warn">答题原则：不会就说 "Good question — my honest answer is I'd have to check, but the design intent was..."。编造技术细节被追问一层就崩，诚实+设计意图永远立得住。评委不怕你不会，怕你装会。</div>
+</div>
+
+</div>
+</body>
+</html>
