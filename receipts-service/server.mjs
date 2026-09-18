@@ -130,21 +130,45 @@ function challengeBody(config, paymentRef, reason = 'payment required') {
     ],
     extensions: {
       bazaar: {
+        // `schema` shape required by x402 v2 validators (x402scan / agentcash discovery):
+        // properties.input.properties.body = input schema; properties.output.properties.example = output sample.
+        schema: {
+          properties: {
+            input: {
+              properties: {
+                body: {
+                  type: 'object',
+                  required: ['x402_payment_ref', 'deliverable_digest'],
+                  properties: {
+                    x402_payment_ref: { type: 'string', description: 'Unique settlement reference (1-128 chars)' },
+                    deliverable_digest: { type: 'string', description: 'SHA-256 hex digest of the delivered content' },
+                    buyer: { type: 'string', description: 'Optional buyer wallet address' },
+                    seller: { type: 'string', description: 'Optional seller wallet address' },
+                  },
+                },
+              },
+            },
+            output: {
+              properties: {
+                example: {
+                  receipt_id: 'r_1a2b3c4d5e6f7a8b',
+                  receipt_version: 1,
+                  x402_payment_ref: 'ord_2026_0001',
+                  payment_signature: '<solana settlement tx signature>',
+                  status: 'anchored',
+                  anchor_tx_signature: '<solana anchor tx signature>',
+                  pda_address: '<solana PDA address>',
+                  deliverable_digest: 'ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12',
+                },
+              },
+            },
+          },
+        },
         info: {
           input: {
             type: 'http',
             method: 'POST',
             bodyType: 'json',
-            bodySchema: {
-              type: 'object',
-              required: ['x402_payment_ref', 'deliverable_digest'],
-              properties: {
-                x402_payment_ref: { type: 'string', description: 'Unique settlement reference (1-128 chars)' },
-                deliverable_digest: { type: 'string', description: 'SHA-256 hex digest of the delivered content' },
-                buyer: { type: 'string', description: 'Optional buyer wallet address' },
-                seller: { type: 'string', description: 'Optional seller wallet address' },
-              },
-            },
           },
         },
       },
