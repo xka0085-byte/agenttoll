@@ -19,10 +19,19 @@ const AMOUNT = '1000'; // 0.001 USDC, 6 decimals
 const DECIMALS = 6;
 const PUBLIC_BASE = 'https://agenttoll-receipts.app.workbuddy.host';
 const SOLANA_DEVNET_CAIP2 = 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1'; // CAIP-2 network id used by x402 v2
+const SOLANA_MAINNET_CAIP2 = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'; // canonical mainnet ref per x402 v2 tables (normalizes to "solana")
+const MAINNET_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKbJqnG7QHLYaKP2mNZZKGHH6TxAWpz'); // SPL Memo: mainnet anchor without program deployment
+const MAINNET_MIN_ANCHOR_LAMPORTS = 5_000_000; // 0.005 SOL — enough for thousands of memo anchors
 const STORE_PATH = new URL('./receipts-store.json', import.meta.url);
 
 // --- RPC fallback chain: probe candidates with body validation, remember the healthy one ---
 const RPC_CANDIDATES = [];
+const RPC_MAINNET_CANDIDATES = [
+  'https://api.mainnet-beta.solana.com',
+  process.env.AGENTTOLL_RPC_URL_MAINNET,
+  process.env.ANKR_API_KEY ? `https://rpc.ankr.com/solana/${process.env.ANKR_API_KEY}` : null,
+].filter(Boolean);
 function initRpcCandidates(extraUrls = []) {
   RPC_CANDIDATES.length = 0;
   RPC_CANDIDATES.push(
@@ -38,14 +47,18 @@ function initRpcCandidates(extraUrls = []) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let lastGood = 0;
+let lastGoodMainnet = 0;
 
-async function rpcCall(method, params) {
+async function rpcCall(method, params, network = 'devnet') {
+  const candidates = network === 'mainnet' ? RPC_MAINNET_CANDIDATES : RPC_CANDIDATES;
+  const lastGoodRef = network === 'mainnet' ? () => lastGoodMainnet : () => lastGood;
+  const setLastGood = network === 'mainnet' ? (v) => { lastGoodMainnet = v; } : (v) => { lastGood = v; };
   const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method, params });
-  const total = RPC_CANDIDATES.length * 8;
+  const total = candidates.length * 8;
   let lastError = 'no candidates';
   for (let i = 0; i < total; i++) {
-    const idx = (lastGood + i) % RPC_CANDIDATES.length;
-    const target = RPC_CANDIDATES[idx];
+    const idx = (lastGoodRef() + i) % candidates.length;
+    const target = candidates[idx];
     try {
       const res = await fetch(target, {
         method: 'POST',
@@ -61,7 +74,7 @@ async function rpcCall(method, params) {
         await sleep(700);
         continue;
       }
-      lastGood = idx;
+      setLastGood(idx);
       return json.result;
     } catch (error) {
       if (error.message?.startsWith('RPC error from')) throw error;
@@ -105,7 +118,46 @@ function readBody(request) {
   });
 }
 
-function challengeBody(config, paymentRef, reason = 'payment required') {
+// Mainnet availability: memo anchoring needs mainnet SOL for fees. Checked on a 60s cache;
+// the mainnet accept option is advertised only while the service wallet can actually pay for anchors.
+let mainnetEnabled = false;
+let mainnetCheckedAt = 0;
+async function refreshMainnetStatus(service) {
+  if (Date.now() - mainnetCheckedAt < 60000) return mainnetEnabled;
+  mainnetCheckedAt = Date.now();
+  try {
+    const bal = await rpcCall('getBalance', [service.publicKey.toBase58(), { commitment: 'confirmed' }], 'mainnet');
+    mainnetEnabled = Number(bal ?? 0) >= MAINNET_MIN_ANCHOR_LAMPORTS;
+  } catch { mainnetEnabled = false; }
+  return mainnetEnabled;
+}
+
+function buildAccepts(config, paymentRef, mainnetOk) {
+  const accepts = [];
+  if (mainnetOk) {
+    accepts.push({
+      scheme: 'exact',
+      network: SOLANA_MAINNET_CAIP2,
+      amount: AMOUNT,
+      asset: MAINNET_USDC_MINT,
+      payTo: config.service,
+      maxTimeoutSeconds: 60,
+      extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service, network: 'mainnet' },
+    });
+  }
+  accepts.push({
+    scheme: 'exact',
+    network: SOLANA_DEVNET_CAIP2,
+    amount: AMOUNT,
+    asset: config.mint,
+    payTo: config.service,
+    maxTimeoutSeconds: 60,
+    extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service, network: 'devnet' },
+  });
+  return accepts;
+}
+
+function challengeBody(config, paymentRef, reason = 'payment required', mainnetOk = mainnetEnabled) {
   // x402 v2 shape (accepts[] in token atomic units) for ecosystem directories (x402scan etc.),
   // plus legacy `challenge` object for backward compatibility with earlier integrations.
   const legacy = { vendor: config.service, amount: AMOUNT, mint: config.mint, report_id: paymentRef, decimals: DECIMALS };
@@ -117,17 +169,7 @@ function challengeBody(config, paymentRef, reason = 'payment required') {
       description: 'ReceiptRail — anchor an on-chain x402 delivery receipt on Solana (0.001 USDC)',
       mimeType: 'application/json',
     },
-    accepts: [
-      {
-        scheme: 'exact',
-        network: SOLANA_DEVNET_CAIP2,
-        amount: AMOUNT,
-        asset: config.mint,
-        payTo: config.service,
-        maxTimeoutSeconds: 60,
-        extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service },
-      },
-    ],
+    accepts: buildAccepts(config, paymentRef, mainnetOk),
     extensions: {
       bazaar: {
         // `schema` shape required by x402 v2 validators (x402scan / agentcash discovery):
@@ -184,11 +226,24 @@ function allParsedInstructions(transaction) {
   return [...topLevel, ...inner].filter((instruction) => instruction && 'parsed' in instruction);
 }
 
-async function verifyPayment(paymentSignature, config, serviceAta) {
-  const transaction = await rpcCall('getTransaction', [
+async function verifyPayment(paymentSignature, config, serviceAta, mainnetAta) {
+  // Network auto-detection: try mainnet first, fall back to devnet (a tx signature only exists on one chain).
+  let transaction = await rpcCall('getTransaction', [
     paymentSignature,
     { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0 },
-  ]);
+  ], 'mainnet').catch(() => null);
+  let network = 'mainnet';
+  let mint = MAINNET_USDC_MINT;
+  let destination = mainnetAta?.toBase58();
+  if (!transaction) {
+    transaction = await rpcCall('getTransaction', [
+      paymentSignature,
+      { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0 },
+    ]);
+    network = 'devnet';
+    mint = config.mint;
+    destination = serviceAta.toBase58();
+  }
   if (!transaction) throw new Error('payment transaction not found or not confirmed');
   if (transaction.meta?.err) throw new Error(`payment transaction failed: ${JSON.stringify(transaction.meta.err)}`);
   const transfer = allParsedInstructions(transaction).find((instruction) => {
@@ -196,11 +251,12 @@ async function verifyPayment(paymentSignature, config, serviceAta) {
     const info = parsed?.info;
     return instruction.program === 'spl-token'
       && parsed?.type === 'transferChecked'
-      && info?.destination === serviceAta.toBase58()
-      && info?.mint === config.mint
+      && info?.destination === destination
+      && info?.mint === mint
       && info?.tokenAmount?.amount === AMOUNT;
   });
-  if (!transfer) throw new Error('payment must contain a successful SPL transferChecked to the service ATA with the exact amount and mint');
+  if (!transfer) throw new Error(`payment must contain a successful SPL transferChecked to the service ${network} ATA with the exact amount and mint`);
+  return network;
 }
 
 function encodeString(value) {
@@ -211,11 +267,30 @@ function encodeString(value) {
 }
 
 // Build + send the anchor transaction (fast — no confirmation wait; async mode beats gateway timeouts).
-async function sendAnchorTransaction(service, paymentRef, digestHex) {
+// mainnet → SPL Memo anchor (no program deployment needed, ~0.00001 SOL per anchor);
+// devnet → ReceiptRail program PDA anchor (richer on-chain object).
+async function sendAnchorTransaction(service, paymentRef, digestHex, network = 'devnet') {
   const digest = Buffer.from(digestHex, 'hex');
   if (digest.length !== 32) throw new Error('deliverable_digest must be a 32-byte SHA-256 hex string');
   const paymentRefBytes = Buffer.from(paymentRef, 'utf8');
   if (paymentRefBytes.length === 0 || paymentRefBytes.length > 128) throw new Error('x402_payment_ref must be 1-128 bytes');
+  if (network === 'mainnet') {
+    const memoText = `x402-receiptrail:v1 ${paymentRef} ${digestHex}`;
+    const { value: blockhash } = await rpcCall('getLatestBlockhash', [{ commitment: 'confirmed' }], 'mainnet');
+    const instruction = new TransactionInstruction({
+      programId: MEMO_PROGRAM_ID,
+      keys: [{ pubkey: service.publicKey, isSigner: true, isWritable: false }],
+      data: Buffer.from(memoText, 'utf8'),
+    });
+    const tx = new Transaction();
+    tx.recentBlockhash = blockhash.blockhash;
+    tx.feePayer = service.publicKey;
+    tx.add(instruction);
+    tx.sign(service);
+    const wire = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
+    const signature = await rpcCall('sendTransaction', [wire, { encoding: 'base64', skipPreflight: false }], 'mainnet');
+    return { tx: signature, pda: null, digest: digest.toString('hex'), mechanism: 'memo', network };
+  }
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from('receipt'), service.publicKey.toBuffer(), paymentRefBytes],
     PROGRAM_ID,
@@ -241,15 +316,15 @@ async function sendAnchorTransaction(service, paymentRef, digestHex) {
   tx.sign(service);
   const wire = tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
   const signature = await rpcCall('sendTransaction', [wire, { encoding: 'base64', skipPreflight: false }]);
-  return { tx: signature, pda: pda.toBase58(), digest: digest.toString('hex') };
+  return { tx: signature, pda: pda.toBase58(), digest: digest.toString('hex'), mechanism: 'pda', network: 'devnet' };
 }
 
 // Background confirmation: poll until confirmed, then settle the receipt in the store.
-async function confirmAnchorInBackground(store, receipt, anchored) {
+async function confirmAnchorInBackground(store, receipt, anchored, network = 'devnet') {
   const deadline = Date.now() + 240000; // up to 4 min, well past any client timeout
   try {
     while (Date.now() < deadline) {
-      const status = await rpcCall('getSignatureStatuses', [[anchored.tx], { searchTransactionHistory: false }]);
+      const status = await rpcCall('getSignatureStatuses', [[anchored.tx], { searchTransactionHistory: false }], network);
       const s = status?.value?.[0];
       if (s?.err) throw new Error(`anchor transaction failed: ${JSON.stringify(s.err)}`);
       if (s && ['confirmed', 'finalized'].includes(s.confirmationStatus)) {
@@ -328,6 +403,23 @@ function toolText(payload) {
 }
 
 async function verifyReceiptOnChain(receipt) {
+  if (receipt?.anchor_mechanism === 'memo') {
+    // Mainnet memo anchor: re-read the anchor transaction and compare its memo to the receipt.
+    if (!receipt.anchor_tx && !receipt.receipt_uri) return { verified: false, reason: 'no anchor tx on receipt' };
+    const anchorSig = receipt.anchor_tx ?? String(receipt.receipt_uri).replace(/^solana:/, '');
+    const tx = await rpcCall('getTransaction', [
+      anchorSig,
+      { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0 },
+    ], 'mainnet').catch(() => null);
+    if (!tx) return { verified: false, reason: 'anchor transaction not found on mainnet' };
+    if (tx.meta?.err) return { verified: false, reason: 'anchor transaction failed on-chain' };
+    const memos = allParsedInstructions(tx)
+      .filter((instruction) => instruction.program === 'spl-memo' || instruction.parsed?.type === 'memo')
+      .map((instruction) => String(instruction.parsed ?? ''));
+    const digestOk = memos.some((memo) => memo.includes(receipt.deliverable_digest));
+    const refOk = memos.some((memo) => memo.includes(receipt.x402_payment_ref));
+    return { verified: digestOk && refOk, mechanism: 'memo', digest_on_chain: digestOk, payment_ref_on_chain: refOk, anchor_tx: anchorSig };
+  }
   if (!receipt?.pda) return { verified: false, reason: 'no PDA on receipt' };
   const acc = await rpcCall('getAccountInfo', [receipt.pda, { encoding: 'base64', commitment: 'confirmed' }]);
   if (!acc?.value) return { verified: false, reason: 'PDA account not found on-chain' };
@@ -432,27 +524,20 @@ async function handleMcpRpc(rpc, ctx) {
       if (typeof signature !== 'string' || !signature) {
         return mcpResult(rpc.id, toolText({
           x402Version: 2,
-          accepts: [{
-            scheme: 'exact',
-            network: SOLANA_DEVNET_CAIP2,
-            amount: AMOUNT,
-            asset: config.mint,
-            payTo: config.service,
-            maxTimeoutSeconds: 60,
-            extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service },
-          }],
-          instructions: `Pay 0.001 USDC (mint ${config.mint}) to ${config.service} on Solana devnet, then call issue_receipt again with x402_payment_signature set to the payment transaction signature.`,
+          accepts: buildAccepts(config, paymentRef, mainnetEnabled),
+          instructions: `Pay 0.001 USDC to ${config.service} on Solana (mainnet USDC mint ${MAINNET_USDC_MINT}, or devnet mint ${config.mint}), then call issue_receipt again with x402_payment_signature set to the payment transaction signature.`,
         }));
       }
       if (store.byPayment[signature]) {
         return mcpResult(rpc.id, toolText(store.receipts[store.byPayment[signature]]));
       }
-      try { await verifyPayment(signature, config, serviceAta); }
+      let paymentNetwork;
+      try { paymentNetwork = await verifyPayment(signature, config, serviceAta, mainnetAta); }
       catch (error) {
-        return mcpResult(rpc.id, toolText({ error: `payment verification failed: ${error.message}`, x402Version: 2, accepts: [{ scheme: 'exact', network: SOLANA_DEVNET_CAIP2, amount: AMOUNT, asset: config.mint, payTo: config.service, maxTimeoutSeconds: 60, extra: { report_id: paymentRef, decimals: DECIMALS, vendor: config.service } }] }));
+        return mcpResult(rpc.id, toolText({ error: `payment verification failed: ${error.message}`, x402Version: 2, accepts: buildAccepts(config, paymentRef, mainnetEnabled) }));
       }
       let anchored;
-      try { anchored = await sendAnchorTransaction(service, paymentRef, digestHex); }
+      try { anchored = await sendAnchorTransaction(service, paymentRef, digestHex, paymentNetwork); }
       catch (error) { return mcpResult(rpc.id, toolText({ error: `receipt anchoring failed: ${error.message}` })); }
       const receiptId = `r_${createHash('sha256').update(signature).digest().hexSlice(0, 16)}`;
       const receipt = {
@@ -460,6 +545,8 @@ async function handleMcpRpc(rpc, ctx) {
         receipt_version: 1,
         x402_payment_ref: paymentRef,
         payment_signature: signature,
+        network: paymentNetwork,
+        anchor_mechanism: anchored.mechanism,
         buyer: args.buyer ?? null,
         seller: args.seller ?? null,
         contract_digest: null,
@@ -476,7 +563,7 @@ async function handleMcpRpc(rpc, ctx) {
       store.receipts[receiptId] = receipt;
       store.byPayment[signature] = receiptId;
       await saveStore(store);
-      confirmAnchorInBackground(store, receipt, anchored).catch((error) => {
+      confirmAnchorInBackground(store, receipt, anchored, paymentNetwork).catch((error) => {
         console.error(`background confirm crashed: ${error.message}`);
       });
       return mcpResult(rpc.id, toolText(receipt));
@@ -496,6 +583,8 @@ async function main() {
   const mint = new PublicKey(config.mint);
   const { getAssociatedTokenAddress } = require('@solana/spl-token');
   const serviceAta = await getAssociatedTokenAddress(mint, service.publicKey);
+  const mainnetAta = await getAssociatedTokenAddress(new PublicKey(MAINNET_USDC_MINT), service.publicKey);
+  refreshMainnetStatus(service).catch(() => {});
   const store = await loadStore();
   const port = Number(process.env.PORT ?? '8787');
   const challengeHeaders = (body) => ({ 'X-Payment-Required': JSON.stringify(body.challenge) });
@@ -577,6 +666,7 @@ async function main() {
       // before any body validation — directory probes rely on this to detect the paywall.
       if (typeof signature !== 'string' || !signature) {
         const paymentRef = typeof body.x402_payment_ref === 'string' && body.x402_payment_ref ? body.x402_payment_ref : 'unspecified';
+        await refreshMainnetStatus(service);
         const challenge = challengeBody(config, paymentRef);
         jsonResponse(response, 402, challenge, challengeHeaders(challenge));
         return;
@@ -594,15 +684,17 @@ async function main() {
         jsonResponse(response, 200, store.receipts[store.byPayment[signature]]);
         return;
       }
-      try { await verifyPayment(signature, config, serviceAta); }
+      let paymentNetwork;
+      try { paymentNetwork = await verifyPayment(signature, config, serviceAta, mainnetAta); }
       catch (error) {
+        await refreshMainnetStatus(service);
         const challenge = challengeBody(config, paymentRef, error.message);
         jsonResponse(response, 402, challenge, challengeHeaders(challenge)); return;
       }
       // Async anchoring: register a pending receipt, return immediately (client polls GET /v1/receipt/:id).
       // On-chain anchor tx is sent first (single fast RPC round-trip); confirmation polling runs in background.
       let anchored;
-      try { anchored = await sendAnchorTransaction(service, paymentRef, digestHex); }
+      try { anchored = await sendAnchorTransaction(service, paymentRef, digestHex, paymentNetwork); }
       catch (error) { jsonResponse(response, 502, { error: `receipt anchoring failed: ${error.message}` }); return; }
       const receiptId = `r_${createHash('sha256').update(signature).digest().hexSlice(0, 16)}`;
       const receipt = {
@@ -610,6 +702,8 @@ async function main() {
         receipt_version: 1,
         x402_payment_ref: paymentRef,
         payment_signature: signature,
+        network: paymentNetwork,
+        anchor_mechanism: anchored.mechanism,
         buyer: body.buyer ?? null,
         seller: body.seller ?? null,
         contract_digest: body.contract_digest ?? null,
@@ -627,7 +721,7 @@ async function main() {
       store.byPayment[signature] = receiptId;
       await saveStore(store);
       jsonResponse(response, 202, receipt);
-      confirmAnchorInBackground(store, receipt, anchored).catch((error) => {
+      confirmAnchorInBackground(store, receipt, anchored, paymentNetwork).catch((error) => {
         console.error(`background confirm crashed: ${error.message}`);
       });
       return;
