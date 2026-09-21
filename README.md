@@ -1,5 +1,9 @@
 # ReceiptRail (formerly AgentToll) — on-chain delivery receipts for x402
 
+> 🔎 **Early access (2 slots):** I'll manually inspect your x402 endpoint's
+> payment-to-delivery path and send you a conformance report within 24h — $9/$19.
+> Details: https://x402-endpoint-inspection.app.workbuddy.host/
+
 [![CI](https://github.com/xka0085-byte/agenttoll/actions/workflows/ci.yml/badge.svg)](https://github.com/xka0085-byte/agenttoll/actions/workflows/ci.yml)
 
 **ReceiptRail** is an on-chain delivery-receipt service for x402 AI-agent payments on Solana: after a settlement, sellers anchor a SHA-256 digest of the delivered content plus the settlement reference into a public PDA. Anyone — the buyer agent, an auditor, a regulator — can independently verify what was delivered, **without trusting the vendor, the buyer, or any API we operate**.
