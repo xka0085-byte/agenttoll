@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://agenttoll-receipts.app.workbuddy.host/sitemap.xml
