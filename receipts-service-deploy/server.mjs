@@ -646,6 +646,12 @@ async function main() {
         response.end(await readFile(new URL('./static/sitemap.xml', import.meta.url)));
         return;
       }
+      if ((request.method === 'GET' || request.method === 'HEAD') && path === '/robots.txt') {
+        // robots.txt: crawlers fetch it with GET (some also probe HEAD)
+        response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        response.end(request.method === 'GET' ? await readFile(new URL('./static/robots.txt', import.meta.url)) : undefined);
+        return;
+      }
       if (request.method === 'GET' && /^\/google[0-9a-f]+\.html$/.test(path)) {
         // Google Search Console verification file
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
