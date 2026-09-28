@@ -30,6 +30,21 @@ ReceiptRail is a **Solana-side verification node for that format**: our MCP tool
 
 Keywords for agent discovery: x402 receipt, x402 offer-receipt, signed receipt verification, x402 dispute, delivery receipt, proof of delivery, proof of payment, Solana, USDC, MCP, AI-agent payments, verifiable settlement, agent reputation, on-chain audit.
 
+## Agent / Chain Evidence Tools — the suite
+
+ReceiptRail is the flagship of a six-tool evidence suite (all read-only, no keys, JSON output):
+
+| Tool | What it checks / proves | Try |
+|---|---|---|
+| [ReceiptRail](https://github.com/xka0085-byte/agenttoll) | on-chain x402 delivery receipts (Solana) | [live MCP endpoint](https://agenttoll-receipts.app.workbuddy.host/) |
+| [mcpdoctor](https://github.com/xka0085-byte/mcp-doctor) | x402 payment endpoint & MCP server preflight | `npx @eidonze/mcpdoctor` |
+| [oauthdoctor](https://github.com/xka0085-byte/oauthdoctor) | MCP OAuth discovery diagnostics | `npx oauthdoctor` |
+| [x402-reconcile](https://github.com/xka0085-byte/x402-reconcile) | x402 402-challenge inspector | `npx x402-reconcile` |
+| [wallet-evidence](https://github.com/xka0085-byte/wallet-evidence) | Solana transaction evidence reports | `npx wallet-evidence` |
+| [crosschain-incident](https://github.com/xka0085-byte/crosschain-incident) | cross-chain message incident normalization | `npx crosschain-incident` |
+
+Live tools page: <https://x402-endpoint-inspection.app.workbuddy.host/tools.html>
+
 ---
 
 AgentToll is the delivery-receipt protocol behind ReceiptRail. A vendor pins the SHA-256 digest of a report's exact bytes into a public PDA account on-chain. Anyone can independently recompute the digest from the delivered file and compare it against the chain, without trusting anyone.
