@@ -163,3 +163,8 @@ Every milestone was reviewed by an independent auditor that did not write the bu
 This project was built for the Colosseum CWF hackathon. Per the rules, we disclose pre-existing development: [t3n-recon-agent](https://github.com/xka0085-byte/t3n-recon-agent) and [z-tenant-recon](https://github.com/xka0085-byte/z-tenant-recon) — a TEE-based prototype implementing the same anti-tamper digest logic (same-id-different-digest rejection, independent verifier), from which the on-chain design was ported. All AgentToll commits, tests, and deployments happened during the competition window (first commit: 2026-09-14).
 
 中文说明见 [README.zh-CN.md](README.zh-CN.md)。
+---
+
+## Suite hub
+
+Part of the [Agent / Chain Evidence Tools](https://xka0085-byte.github.io/evidence-tools/) suite — read-only, no-keys, no-payments diagnostics for AI agents on Web3.
