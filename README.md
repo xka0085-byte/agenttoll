@@ -1,4 +1,6 @@
-# ReceiptRail (formerly AgentToll) — on-chain delivery receipts for x402
+# ReceiptRail (formerly AgentToll) — on-chain delivery receipts & official x402 receipt verification on Solana
+
+> ⚠️ **Official project notice / 身份声明**: This is the official ReceiptRail repository, maintained by GitHub org [`xka0085-byte`](https://github.com/xka0085-byte) and npm account [`eidonze`](https://www.npmjs.com/~eidonze). We are **NOT affiliated** with `agenttoll.dev`, `npm/agent-toll`, `agenttoll-mcp` (Base), `@agenttoll/sdk`, `402.ad/AgentToll`, or the "Receiptrail" accounting SaaS. Verify you are talking to this project by checking: MCP endpoint `https://agenttoll-receipts.app.workbuddy.host/mcp` · Official MCP Registry id `io.github.xka0085-byte/receiptrail` · npm package `receiptrail-mcp` (published by `eidonze`).
 
 > 🔎 **Early access (2 slots):** I'll manually inspect your x402 endpoint's
 > payment-to-delivery path and send you a conformance report within 24h — $9/$19.
@@ -17,9 +19,15 @@
 | npm (stdio MCP bridge) | `npx -y receiptrail-mcp` |
 | Agent Card / SKILL.md / llms.txt | `/.well-known/agent-card.json` · `/SKILL.md` · `/llms.txt` |
 | Pricing (0.001 USDC/receipt via x402) | https://agenttoll-receipts.app.workbuddy.host/ |
-| Tools | `issue_receipt` · `verify_receipt` · `get_receipt` |
+| Tools | `issue_receipt` · `verify_receipt` · `get_receipt` · `verify_x402_receipt` |
 
-Keywords for agent discovery: x402 receipt, x402 escrow, delivery receipt, proof of delivery, Solana, USDC, MCP, AI-agent payments, verifiable settlement, receipt verification.
+### 🆕 `verify_x402_receipt` — official x402 receipt-format verification (v0.3)
+
+The x402 Foundation now ships a standard **Signed Offers & Receipts** extension ([docs.x402.org/extensions/offer-receipt](https://docs.x402.org/extensions/offer-receipt), npm `@x402/extensions`): servers sign an **offer** on every 402 and a **receipt** on every 200 — portable proof-of-interaction artifacts for reputation, auditing and disputes.
+
+ReceiptRail is a **Solana-side verification node for that format**: our MCP tool `verify_x402_receipt` validates any official-format receipt artifact (JWS with **EdDSA/Ed25519** — Solana-native — or **ES256/P-256**), resolves the signer key automatically from `did:key` / `did:web` / `did:jwk`, enforces freshness and payload assertions, and anchors verification results on-chain. Cross-verified against the official `@x402/extensions` verifier (same verdicts on valid and tampered artifacts — see `receipts-service/test/cross-verify.mjs`).
+
+Keywords for agent discovery: x402 receipt, x402 offer-receipt, signed receipt verification, x402 dispute, delivery receipt, proof of delivery, proof of payment, Solana, USDC, MCP, AI-agent payments, verifiable settlement, agent reputation, on-chain audit.
 
 ---
 

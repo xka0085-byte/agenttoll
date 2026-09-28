@@ -1,6 +1,8 @@
 # receiptrail-mcp
 
-**ReceiptRail** MCP server (stdio bridge) — issue and verify **on-chain x402 delivery receipts on Solana**.
+> ⚠️ **Official package notice**: this is the official `receiptrail-mcp`, published by npm user [`eidonze`](https://www.npmjs.com/~eidonze), repo [`xka0085-byte/agenttoll`](https://github.com/xka0085-byte/agenttoll). We are **NOT affiliated** with `agenttoll-mcp` (Base), `@agenttoll/sdk`, `agent-toll`, `agenttoll.dev` or 402.ad's "AgentToll". Verify the remote endpoint: `https://agenttoll-receipts.app.workbuddy.host/mcp`.
+
+**ReceiptRail** MCP server (stdio bridge) — issue and verify **on-chain x402 delivery receipts on Solana**, and verify **official x402 offer-receipt extension artifacts** (docs.x402.org/extensions/offer-receipt).
 
 Hash-locked, escrow-grade, independently verifiable proof of delivery for AI-agent payments. After an x402 settlement, sellers anchor a SHA-256 digest of the delivered content on Solana; buyers verify it offline, forever, with zero trust in the issuer.
 
@@ -30,6 +32,7 @@ https://agenttoll-receipts.app.workbuddy.host/mcp
 | `issue_receipt` | 0.001 USDC via x402 (founding sellers: first 10 free for 30 days) | Anchor a SHA-256 digest of delivered content + settlement reference on Solana. Omit the payment signature to receive the x402 challenge first. Poll `get_receipt` until `outcome === "settled"`. |
 | `verify_receipt` | free | Verify a receipt against live Solana state: PDA owner must be the ReceiptRail program, stored digest and payment ref must match. |
 | `get_receipt` | free | Full receipt details by `receipt_id` or `x402_payment_ref` (payment_ref always resolves on-chain). |
+| `verify_x402_receipt` | free | Verify a **signed receipt in the official x402 offer-receipt extension format** (JWS, EdDSA/Ed25519 or ES256/P-256; key auto-resolves from did:key/did:web/did:jwk). Cross-verified against the official `@x402/extensions` verifier. |
 
 ## Why not just app-layer signed receipts?
 

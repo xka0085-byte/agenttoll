@@ -1,0 +1,30 @@
+{
+  "kid": "did:key:z6Mkqv2pkj9bZHoVzk6aRBZ8Lzcg8x1ogNTn8a3wPbB6hfCc#key-1",
+  "public_key_jwk": {
+    "crv": "Ed25519",
+    "x": "qkxJ5GQoO98N_EuoJFC9EtvCf3HnRl7oljZ5fdQ8N0k",
+    "kty": "OKP"
+  },
+  "vector": {
+    "format": "jws",
+    "signature": "eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa3F2MnBrajliWkhvVnprNmFSQlo4THpjZzh4MW9nTlRuOGEzd1BiQjZoZkNjI2tleS0xIn0.eyJpc3N1ZWRBdCI6MTc5MDU1ODM0MiwibmV0d29yayI6InNvbGFuYTo1ZXlrdDRVc0Z2OFA4TkpkVFJFcFkxdnpxS3FaS3ZkcCIsInBheWVyIjoiODFrRnFjeHpMaXNibkQ4Y3pWWFMzRWJRWUN3S1FXNmRTMURqYjNYS2JkMnYiLCJyZXNvdXJjZVVybCI6Imh0dHBzOi8vYWdlbnR0b2xsLXJlY2VpcHRzLmFwcC53b3JrYnVkZHkuaG9zdC92MS9yZWNlaXB0IiwidHJhbnNhY3Rpb24iOiI1VkVSaVo4RmZ6YzlwRmY4UkpnV29MOXRHb3ZrdXdzcUdWaEpISFhVS3ZoWk10R2pUOURQZFZNTVBlUlo4Q0xmS2U0WWZQVFpoWVN0c3dZbHA4ckxjR05OIiwidmVyc2lvbiI6MX0.huCAqJa5IW_NFoU8qc4-daG5Gm4-0kDO_PzTAum2ZECXgGEsxoY6jw_ke3kX92PAtun565KUV_6AUPR8kC9JAw"
+  },
+  "payload": {
+    "version": 1,
+    "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    "resourceUrl": "https://agenttoll-receipts.app.workbuddy.host/v1/receipt",
+    "payer": "81kFqcxzLisbnD8czVXS3EbQYCwKQW6dS1Djb3XKbd2v",
+    "issuedAt": 1790558342,
+    "transaction": "5VERiZ8Ffzc9pFf8RJgWoL9tGovkuwsqGVhJHHXUKvhZMtGjT9DPdVMMPeRZ8CLfKe4YfPTZhYStswYlp8rLcGNN"
+  },
+  "official_verify_ok": false,
+  "official_verify_payload": {
+    "issuedAt": 1790558342,
+    "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    "payer": "81kFqcxzLisbnD8czVXS3EbQYCwKQW6dS1Djb3XKbd2v",
+    "resourceUrl": "https://agenttoll-receipts.app.workbuddy.host/v1/receipt",
+    "transaction": "5VERiZ8Ffzc9pFf8RJgWoL9tGovkuwsqGVhJHHXUKvhZMtGjT9DPdVMMPeRZ8CLfKe4YfPTZhYStswYlp8rLcGNN",
+    "version": 1
+  },
+  "tamper_check": "REJECTED_OK (signature verification failed)"
+}

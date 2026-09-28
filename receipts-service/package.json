@@ -1,0 +1,19 @@
+{
+  "name": "agenttoll-receipts-service",
+  "version": "0.3.0",
+  "type": "module",
+  "private": true,
+  "description": "ReceiptRail — x402-native on-chain delivery receipts on Solana + official x402 offer-receipt verifier",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test/cross-verify.mjs"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.95.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -8,6 +8,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { verifyX402Receipt } from './x402-receipt-verify.mjs';
 
 const require = createRequire(new URL('./package.json', import.meta.url));
 const {
@@ -390,6 +391,37 @@ const MCP_TOOLS = [
       },
     },
   },
+  {
+    name: 'verify_x402_receipt',
+    title: 'Verify signed x402 receipt (official offer-receipt format)',
+    description: 'Verify a signed receipt in the official x402 offer-receipt extension format (docs.x402.org/extensions/offer-receipt, npm @x402/extensions). Accepts {format:"jws", signature} artifacts (JWS with EdDSA/Ed25519 or ES256/P-256), checks structure, required payload fields (version/network/resourceUrl/payer/issuedAt), cryptographic signature, optional freshness window, and optional expected values. Public key resolves automatically from did:key/did:web/did:jwk kid, or pass public_key_jwk directly. Read-only, no cost.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        receipt: {
+          type: 'object',
+          description: 'Signed receipt artifact, e.g. {"format":"jws","signature":"<JWS compact serialization>"}',
+          required: ['format', 'signature'],
+          properties: {
+            format: { type: 'string', enum: ['jws'] },
+            signature: { type: 'string', description: 'JWS compact serialization (header.payload.signature)' },
+          },
+        },
+        public_key_jwk: { type: 'object', description: 'Optional JWK to verify with. Omit to resolve from the kid (did:key:z... Ed25519, did:web, did:jwk).' },
+        max_age_seconds: { type: 'number', description: 'Freshness window for issuedAt (default 3600; pass 0 to skip the freshness gate).' },
+        expect: {
+          type: 'object',
+          description: 'Optional assertions: {resourceUrl?, payer?, network?} — verification fails if the payload contradicts them.',
+          properties: {
+            resourceUrl: { type: 'string' },
+            payer: { type: 'string' },
+            network: { type: 'string' },
+          },
+        },
+      },
+      required: ['receipt'],
+    },
+  },
 ];
 
 function mcpResult(id, result) {
@@ -567,6 +599,19 @@ async function handleMcpRpc(rpc, ctx) {
         console.error(`background confirm crashed: ${error.message}`);
       });
       return mcpResult(rpc.id, toolText(receipt));
+    }
+    if (name === 'verify_x402_receipt') {
+      const result = await verifyX402Receipt({
+        receipt: args.receipt,
+        public_key_jwk: args.public_key_jwk,
+        max_age_seconds: args.max_age_seconds,
+        expect: args.expect,
+      });
+      return mcpResult(rpc.id, toolText({
+        tool: 'verify_x402_receipt',
+        format: 'x402 offer-receipt extension (docs.x402.org/extensions/offer-receipt)',
+        ...result,
+      }));
     }
     return mcpError(rpc.id, -32602, `unknown tool: ${name}`);
   }
